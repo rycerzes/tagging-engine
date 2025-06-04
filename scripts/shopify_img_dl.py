@@ -1,5 +1,6 @@
 import asyncio
 import csv
+import json
 import os
 import urllib.parse
 from pathlib import Path
@@ -136,6 +137,32 @@ def write_product_info(product_id: str, product_info: Dict[str, str], download_d
     print(f"Created product info file: {info_file.name}")
 
 
+def write_product_info_json(product_id: str, product_info: Dict[str, str], download_dir: Path) -> None:
+    """Write product information to a JSON file in the product folder."""
+    product_dir = download_dir / f"product_{product_id}"
+    product_dir.mkdir(parents=True, exist_ok=True)
+    
+    info_file = product_dir / "product_info.json"
+    
+    json_data = {
+        "product_id": product_id,
+        "title": product_info['title'],
+        "description": product_info['description'],
+        "product_type": product_info['product_type'],
+        "alias": product_info['alias'],
+        "mrp": product_info['mrp'],
+        "price_display_amount": product_info['price_display_amount'],
+        "discount_percentage": product_info['discount_percentage'],
+        "product_tags": product_info['product_tags'],
+        "product_collections": product_info['product_collections']
+    }
+    
+    with open(info_file, "w", encoding="utf-8") as f:
+        json.dump(json_data, f, indent=2, ensure_ascii=False)
+    
+    print(f"Created product JSON file: {info_file.name}")
+
+
 def show_menu() -> int:
     """Display menu and get user choice."""
     print("\n" + "="*50)
@@ -192,7 +219,7 @@ async def download_images_process():
 def add_text_descriptions_process():
     """Handle adding textual descriptions to product folders."""
     product_details_csv = input("Enter path to product details CSV file: ").strip()
-    download_dir = Path("data/downloaded_images")
+    download_dir = Path("data/raw/downloaded_images")
 
     if not os.path.exists(product_details_csv):
         print(f"Product details CSV file not found: {product_details_csv}")
@@ -213,13 +240,15 @@ def add_text_descriptions_process():
         if product_dir.exists():
             print(f"Adding info for product {product_id}...")
             write_product_info(product_id, product_info, download_dir)
+            write_product_info_json(product_id, product_info, download_dir)
             created_count += 1
         else:
             print(f"Warning: Product folder for ID {product_id} not found, creating anyway...")
             write_product_info(product_id, product_info, download_dir)
+            write_product_info_json(product_id, product_info, download_dir)
             created_count += 1
 
-    print(f"\nText descriptions added! Created {created_count} info files in: {download_dir.absolute()}")
+    print(f"\nText descriptions added! Created {created_count} info files (both .txt and .json) in: {download_dir.absolute()}")
 
 
 async def main():
