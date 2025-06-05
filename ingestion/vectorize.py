@@ -9,16 +9,37 @@ from transformers import CLIPProcessor, CLIPModel
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams, PointStruct
 from typing import List, Dict, Any
+from dotenv import load_dotenv
+from urllib.parse import urlparse
+
+# Load environment variables
+load_dotenv()
 
 
 class FashionVectorizer:
     def __init__(
         self,
         data_path: str = "/root/flickd-ai/tagging-engine/data/raw/downloaded_images",
-        qdrant_host: str = "172.18.0.2",
-        qdrant_port: int = 6333,
+        qdrant_url: str = None,
+        qdrant_collection_name: str = None,
     ):
         self.data_path = data_path
+
+        # Load configuration from environment variables
+        self.qdrant_url = qdrant_url or os.getenv("QDRANT_URL")
+        self.collection_name = qdrant_collection_name or os.getenv("QDRANT_COLLECTION_NAME")
+        
+        if not self.qdrant_url:
+            raise ValueError("QDRANT_URL must be set in environment variables or passed as parameter")
+        if not self.collection_name:
+            raise ValueError("QDRANT_COLLECTION_NAME must be set in environment variables or passed as parameter")
+
+        # Parse Qdrant URL to extract host and port
+        parsed_url = urlparse(self.qdrant_url)
+        qdrant_host = parsed_url.hostname
+        qdrant_port = parsed_url.port or 6333
+
+        print(f"Connecting to Qdrant at {self.qdrant_url} (collection: {self.collection_name})")
 
         # Check for CUDA availability and configure device
         self.device = self._setup_device()
@@ -36,7 +57,6 @@ class FashionVectorizer:
             print(f"FashionCLIP model moved to {self.device}")
 
         self.client = QdrantClient(host=qdrant_host, port=qdrant_port)
-        self.collection_name = "fashion_products"
         self._setup_collection()
 
     def _setup_device(self):

@@ -6,10 +6,32 @@ from PIL import Image
 from transformers import CLIPProcessor, CLIPModel
 from qdrant_client import QdrantClient
 from typing import List, Dict, Any, Optional
+from dotenv import load_dotenv
+from urllib.parse import urlparse
+import os
+
+# Load environment variables
+load_dotenv()
 
 
 class FashionQuerier:
-    def __init__(self, qdrant_host: str = "172.18.0.2", qdrant_port: int = 6333):
+    def __init__(self, qdrant_url: str = None, qdrant_collection_name: str = None):
+        # Load configuration from environment variables
+        self.qdrant_url = qdrant_url or os.getenv("QDRANT_URL")
+        self.collection_name = qdrant_collection_name or os.getenv("QDRANT_COLLECTION_NAME")
+
+        if not self.qdrant_url:
+            raise ValueError("QDRANT_URL must be set in environment variables or passed as parameter")
+        if not self.collection_name:
+            raise ValueError("QDRANT_COLLECTION_NAME must be set in environment variables or passed as parameter")
+
+        # Parse Qdrant URL to extract host and port
+        parsed_url = urlparse(self.qdrant_url)
+        qdrant_host = parsed_url.hostname
+        qdrant_port = parsed_url.port or 6333
+
+        print(f"Connecting to Qdrant at {self.qdrant_url} (collection: {self.collection_name})")
+
         # Check for CUDA availability and configure device
         self.device = self._setup_device()
         print(f"Using device: {self.device}")
@@ -26,7 +48,6 @@ class FashionQuerier:
             print(f"FashionCLIP model moved to {self.device}")
 
         self.client = QdrantClient(host=qdrant_host, port=qdrant_port)
-        self.collection_name = "fashion_products"
 
     def _setup_device(self):
         """Setup and return the best available device"""
@@ -308,14 +329,16 @@ def main():
         default="text",
         help="Output format (default: text)",
     )
+    # Remove hardcoded host/port args since we're using env vars
     parser.add_argument(
-        "--host",
+        "--qdrant-url",
         type=str,
-        default="172.18.0.2",
-        help="Qdrant host (default: 172.18.0.2)",
+        help="Qdrant URL (overrides QDRANT_URL env var)",
     )
     parser.add_argument(
-        "--port", type=int, default=6333, help="Qdrant port (default: 6333)"
+        "--collection",
+        type=str,
+        help="Collection name (overrides QDRANT_COLLECTION_NAME env var)",
     )
 
     args = parser.parse_args()
@@ -324,7 +347,10 @@ def main():
         print("Error: Please provide either --text or --image query")
         return
 
-    querier = FashionQuerier(qdrant_host=args.host, qdrant_port=args.port)
+    querier = FashionQuerier(
+        qdrant_url=args.qdrant_url,
+        qdrant_collection_name=args.collection
+    )
 
     try:
         if args.text and args.image:
