@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "fashion-clip>=0.2.2",
+    "fastapi[standard]>=0.115.12",
     "ftfy>=6.3.1",
     "httpx>=0.28.1",
     "numpy>=2.2.6",
