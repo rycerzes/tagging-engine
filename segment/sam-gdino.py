@@ -19,7 +19,7 @@ Hyper parameters
 parser = argparse.ArgumentParser()
 parser.add_argument("--grounding-model", default="IDEA-Research/grounding-dino-tiny")
 parser.add_argument("--sam2-model", default="facebook/sam2-hiera-base-plus")
-parser.add_argument("--text-prompt", default="clothing. accessories.")
+parser.add_argument("--text-prompt", default="watch. topwear. bottomwear. shoes. headgear.")
 parser.add_argument(
     "--img-path",
     default="/root/flickd-ai/tagging-engine/data/raw/downloaded_images/product_15824/15824_000.jpg",
@@ -115,12 +115,41 @@ labels = [
     for class_name, confidence in zip(class_names, confidences)
 ]
 
+
+def crop_image_with_mask(image, mask, bbox):
+    """
+    Crop image using mask and bounding box
+    Returns RGBA image with transparent background
+    """
+    x1, y1, x2, y2 = map(int, bbox)
+    
+    cropped_img = image.crop((x1, y1, x2, y2))
+    
+    cropped_mask = mask[y1:y2, x1:x2]
+    
+    cropped_img = cropped_img.convert("RGBA")
+    
+    img_array = np.array(cropped_img)
+    img_array[:, :, 3] = cropped_mask * 255  # Set alpha channel
+    
+    return Image.fromarray(img_array)
+
+
 print("Creating visualizations...")
 # Visualize results
 img = cv2.imread(img_path)
 detections = sv.Detections(
     xyxy=input_boxes, mask=masks.astype(bool), class_id=class_ids
 )
+
+print("Generating cropped images...")
+for i, (class_name, bbox, mask) in enumerate(zip(class_names, input_boxes, masks)):
+    cropped_img = crop_image_with_mask(image, mask, bbox)
+    
+    crop_filename = f"crop_{i}_{class_name.replace(' ', '_')}.png"
+    crop_path = OUTPUT_DIR / crop_filename
+    cropped_img.save(crop_path)
+    print(f"Saved cropped image: {crop_filename}")
 
 # Annotate image
 box_annotator = sv.BoxAnnotator(color=ColorPalette.from_hex(CUSTOM_COLOR_MAP))
@@ -146,6 +175,29 @@ def single_mask_to_rle(mask):
     rle = mask_util.encode(np.array(mask[:, :, None], order="F", dtype="uint8"))[0]
     rle["counts"] = rle["counts"].decode("utf-8")
     return rle
+
+
+def crop_image_with_mask(image, mask, bbox):
+    """
+    Crop image using mask and bounding box
+    Returns RGBA image with transparent background
+    """
+    x1, y1, x2, y2 = map(int, bbox)
+    
+    # Crop the original image to bounding box
+    cropped_img = image.crop((x1, y1, x2, y2))
+    
+    # Crop the mask to the same bounding box
+    cropped_mask = mask[y1:y2, x1:x2]
+    
+    # Convert to RGBA
+    cropped_img = cropped_img.convert("RGBA")
+    
+    # Apply mask - set alpha channel based on mask
+    img_array = np.array(cropped_img)
+    img_array[:, :, 3] = cropped_mask * 255  # Set alpha channel
+    
+    return Image.fromarray(img_array)
 
 
 if DUMP_JSON_RESULTS:
