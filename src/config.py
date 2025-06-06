@@ -29,6 +29,17 @@ USE_GEMINI_FOR_TEXT_PROMPT = False
 TEXT_PROMPT = """wristwear. topwear. bottomwear. footwear. 
 headgear. accessories. bag. outerwear."""
 
+# Vibes configuration for style analysis
+VIBES_LIST = [
+    {"id": "coquette", "name": "Coquette", "description": "Feminine, romantic, bow-adorned aesthetic"},
+    {"id": "clean_girl", "name": "Clean Girl", "description": "Minimal, natural, effortless beauty"},
+    {"id": "cottagecore", "name": "Cottagecore", "description": "Rural, vintage, nature-inspired aesthetic"},
+    {"id": "streetcore", "name": "Streetcore", "description": "Urban, edgy, street-inspired fashion"},
+    {"id": "y2k", "name": "Y2K", "description": "Early 2000s futuristic, tech-inspired style"},
+    {"id": "boho", "name": "Boho", "description": "Bohemian, free-spirited, artistic style"},
+    {"id": "party_glam", "name": "Party Glam", "description": "Glamorous, sparkly, night-out ready"}
+]
+
 # Detection thresholds
 BOX_THRESHOLD = 0.4
 TEXT_THRESHOLD = 0.3

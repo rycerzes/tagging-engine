@@ -4,6 +4,8 @@ from .responses import (
     CroppedKeyframeListResponse,
     KeyframeResponse,
     CroppedKeyframeResponse,
+    ContentAnalysis,
+    VibeAnalysis,
 )
 
 __all__ = [
@@ -12,4 +14,6 @@ __all__ = [
     "CroppedKeyframeListResponse",
     "KeyframeResponse",
     "CroppedKeyframeResponse",
+    "ContentAnalysis",
+    "VibeAnalysis",
 ]

@@ -1,5 +1,6 @@
 import os
 import logging
+import asyncio
 
 from fastapi import APIRouter, File, UploadFile, HTTPException, Depends
 from fastapi.responses import FileResponse
@@ -17,6 +18,8 @@ from ..models import (
     UploadVideoResponse,
     KeyframeListResponse,
     CroppedKeyframeListResponse,
+    ContentAnalysis,
+    VibeAnalysis,
 )
 
 router = APIRouter(tags=["upload"])
@@ -62,6 +65,8 @@ async def upload_video(
         raise HTTPException(status_code=500, detail=f"Failed to save file: {str(e)}")
 
     try:
+        content_analysis = None
+        
         # Generate dynamic text prompt using Gemini if enabled
         if USE_GEMINI_FOR_TEXT_PROMPT:
             logger.info("Using Gemini for text prompt generation")
@@ -69,15 +74,53 @@ async def upload_video(
                 text_prompt = gemini_service.generate_text_prompt_from_video(file_path)
             else:
                 text_prompt = gemini_service.generate_text_prompt_from_image(file_path)
+            
+            # Process file based on type
+            if file_extension == "mp4":
+                result = video_service.process_video(file_path, video_id, text_prompt)
+            else:
+                result = video_service.process_image(file_path, video_id, text_prompt)
         else:
-            logger.info("Using default text prompt (Gemini disabled)")
+            logger.info("Using default text prompt and performing concurrent content analysis")
             text_prompt = TEXT_PROMPT
-
-        # Process file based on type
-        if file_extension == "mp4":
-            result = video_service.process_video(file_path, video_id, text_prompt)
-        else:
-            result = video_service.process_image(file_path, video_id, text_prompt)
+            
+            # Run both processes concurrently
+            is_video = file_extension == "mp4"
+            
+            # Create tasks for concurrent execution
+            analysis_task = asyncio.create_task(
+                gemini_service.analyze_content_async(file_path, is_video)
+            )
+            
+            # Run video/image processing in thread pool to avoid blocking
+            loop = asyncio.get_event_loop()
+            if is_video:
+                processing_task = loop.run_in_executor(
+                    None, video_service.process_video, file_path, video_id, text_prompt
+                )
+            else:
+                processing_task = loop.run_in_executor(
+                    None, video_service.process_image, file_path, video_id, text_prompt
+                )
+            
+            # Wait for both tasks to complete
+            analysis_result, result = await asyncio.gather(analysis_task, processing_task)
+            
+            # Convert to ContentAnalysis model
+            vibes = [
+                VibeAnalysis(
+                    id=vibe["id"],
+                    name=vibe["name"],
+                    confidence=vibe["confidence"]
+                )
+                for vibe in analysis_result.get("vibes", [])
+            ]
+            
+            content_analysis = ContentAnalysis(
+                audio_transcription=analysis_result.get("audio_transcription"),
+                clothing_description=analysis_result.get("clothing_description", ""),
+                vibes=vibes
+            )
         
         os.remove(file_path)
 
@@ -94,6 +137,7 @@ async def upload_video(
             masked_keyframes_generated=len(result["masked_files"]),
             masked_keyframes=result["masked_files"],
             masked_keyframes_url=f"/upload/{video_id}/keyframes-masked",
+            content_analysis=content_analysis,
         )
 
     except Exception as e:

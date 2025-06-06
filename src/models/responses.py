@@ -1,5 +1,5 @@
-from typing import List
 from pydantic import BaseModel
+from typing import List, Optional, Dict, Any
 
 
 class KeyframeResponse(BaseModel):
@@ -14,19 +14,32 @@ class CroppedKeyframeResponse(BaseModel):
     bbox: List[float]
 
 
+class VibeAnalysis(BaseModel):
+    id: str
+    name: str
+    confidence: float
+
+
+class ContentAnalysis(BaseModel):
+    audio_transcription: Optional[str] = None
+    clothing_description: str
+    vibes: List[VibeAnalysis]
+
+
 class UploadVideoResponse(BaseModel):
     video_id: str
     original_filename: str
     scenes_detected: int
     keyframes_generated: int
-    keyframes: List[KeyframeResponse]
+    keyframes: List[Dict[str, Any]]
     keyframes_url: str
     cropped_keyframes_generated: int
-    cropped_keyframes: List[CroppedKeyframeResponse]
+    cropped_keyframes: List[Dict[str, Any]]
     cropped_keyframes_url: str
     masked_keyframes_generated: int
-    masked_keyframes: List[CroppedKeyframeResponse]
+    masked_keyframes: List[Dict[str, Any]]
     masked_keyframes_url: str
+    content_analysis: Optional[ContentAnalysis] = None
 
 
 class KeyframeListItem(BaseModel):
