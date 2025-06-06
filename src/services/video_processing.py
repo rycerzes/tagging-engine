@@ -80,7 +80,7 @@ class VideoProcessingService:
         if all_cropped_files:
             print("Starting deduplication of cropped images...")
             unique_cropped_files, removed_duplicates = self.deduplication_service.deduplicate_crops(
-                cropped_keyframes_path, all_cropped_files
+                cropped_keyframes_path, all_cropped_files, video_id
             )
             all_cropped_files = unique_cropped_files
 
@@ -147,7 +147,7 @@ class VideoProcessingService:
         if all_cropped_files:
             print("Starting deduplication of cropped images...")
             unique_cropped_files, removed_duplicates = self.deduplication_service.deduplicate_crops(
-                cropped_keyframes_path, all_cropped_files
+                cropped_keyframes_path, all_cropped_files, video_id
             )
             all_cropped_files = unique_cropped_files
 

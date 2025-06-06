@@ -6,8 +6,16 @@ from pathlib import Path
 import torch
 from transformers import CLIPProcessor, CLIPModel
 import os
+from qdrant_client import QdrantClient
+from qdrant_client.models import Distance, VectorParams, PointStruct
+from urllib.parse import urlparse
+import hashlib
+from dotenv import load_dotenv
 
 from ..config import DEVICE
+
+# Load environment variables
+load_dotenv()
 
 
 class FaissDeduplicationService:
@@ -16,6 +24,42 @@ class FaissDeduplicationService:
         self._processor = None
         self._model = None
         self.model_name = "patrickjohncyh/fashion-clip"
+
+        # Qdrant configuration
+        self.qdrant_url = os.getenv("QDRANT_URL")
+        self.fashion_products_collection = os.getenv("QDRANT_COLLECTION_NAME")
+
+        if not self.qdrant_url:
+            raise ValueError("QDRANT_URL must be set in environment variables")
+
+        # Parse Qdrant URL to extract host and port
+        parsed_url = urlparse(self.qdrant_url)
+        qdrant_host = parsed_url.hostname
+        qdrant_port = parsed_url.port or 6333
+
+        self.client = QdrantClient(host=qdrant_host, port=qdrant_port)
+
+    def _setup_collection(self, collection_name: str):
+        """Initialize Qdrant collection if it doesn't exist"""
+        try:
+            collections = self.client.get_collections().collections
+            collection_exists = any(c.name == collection_name for c in collections)
+
+            if not collection_exists:
+                self.client.create_collection(
+                    collection_name=collection_name,
+                    vectors_config=VectorParams(size=512, distance=Distance.COSINE),
+                )
+                print(f"Created Qdrant collection: {collection_name}")
+            else:
+                print(f"Using existing Qdrant collection: {collection_name}")
+        except Exception as e:
+            print(f"Warning: Could not setup Qdrant collection: {e}")
+
+    def _generate_crop_id(self, filename: str, video_id: str) -> str:
+        """Generate unique ID for crop"""
+        combined = f"{video_id}_{filename}"
+        return hashlib.md5(combined.encode()).hexdigest()
 
     def _load_model(self):
         """Lazy load the Fashion-CLIP model"""
@@ -34,22 +78,62 @@ class FaissDeduplicationService:
         with torch.no_grad():
             image_features = self._model.get_image_features(**inputs)
             # Normalize the features
-            image_features = image_features / image_features.norm(p=2, dim=-1, keepdim=True)
+            image_features = image_features / image_features.norm(
+                p=2, dim=-1, keepdim=True
+            )
 
         return image_features.cpu().numpy().flatten()
 
+    def _query_fashion_products(
+        self, embedding: np.ndarray, limit: int = 5
+    ) -> List[Dict[str, Any]]:
+        """Query similar products from fashion_products collection"""
+        try:
+            search_results = self.client.query_points(
+                collection_name=self.fashion_products_collection,
+                query=embedding.tolist(),
+                limit=limit,
+                score_threshold=0.5,
+                with_payload=True,
+            )
+
+            results = []
+            for result in search_results.points:
+                results.append(
+                    {
+                        "product_id": result.id,
+                        "score": result.score,
+                        "payload": result.payload,
+                    }
+                )
+
+            return results
+        except Exception as e:
+            print(f"Error querying fashion_products collection: {e}")
+            return []
+
     def deduplicate_crops(
-        self, cropped_dir: Path, cropped_files: List[Dict[str, Any]]
+        self,
+        cropped_dir: Path,
+        cropped_files: List[Dict[str, Any]],
+        video_id: str = None,
     ) -> Tuple[List[Dict[str, Any]], List[str]]:
         """
-        Deduplicate cropped images using FAISS similarity search
+        Deduplicate cropped images using FAISS similarity search and store in Qdrant
 
         Returns:
-            - List of unique cropped files (deduplicated)
+            - List of unique cropped files (deduplicated) with fashion product matches
             - List of filenames that were removed as duplicates
         """
         if not cropped_files:
             return cropped_files, []
+
+        if not video_id:
+            raise ValueError("video_id is required for collection naming")
+
+        # Use video_id as collection name
+        collection_name = video_id
+        self._setup_collection(collection_name)
 
         self._load_model()
 
@@ -104,23 +188,29 @@ class FaissDeduplicationService:
         for class_name, class_items in class_groups.items():
             if len(class_items) <= 1:
                 continue
-                
-            class_indices = [item[0] for item in class_items if item[0] < len(valid_files)]
-            
+
+            class_indices = [
+                item[0] for item in class_items if item[0] < len(valid_files)
+            ]
+
             for i in class_indices:
                 if i in to_remove:
                     continue
-                    
-                for j in range(1, min(10, len(similarities[i]))):  # Check top 10 similar
+
+                for j in range(
+                    1, min(10, len(similarities[i]))
+                ):  # Check top 10 similar
                     similar_idx = indices[i][j]
-                    if (similar_idx in class_indices and 
-                        similar_idx not in to_remove and 
-                        similarities[i][j] >= class_threshold and
-                        similar_idx > i):
+                    if (
+                        similar_idx in class_indices
+                        and similar_idx not in to_remove
+                        and similarities[i][j] >= class_threshold
+                        and similar_idx > i
+                    ):
                         to_remove.add(similar_idx)
                         removed_files.append(valid_files[similar_idx]["filename"])
 
-        # Second pass: remove similar images across all classes (lower threshold) 
+        # Second pass: remove similar images across all classes (lower threshold)
         for i in range(len(valid_files)):
             if i in to_remove:
                 continue
@@ -140,13 +230,56 @@ class FaissDeduplicationService:
                 os.remove(file_path)
                 print(f"Removed duplicate: {filename}")
 
-        # Return deduplicated list
-        unique_files = [
-            valid_files[i] for i in range(len(valid_files)) 
-            if i not in to_remove
-        ]
+        # Process unique files - store in Qdrant and query fashion products
+        unique_files = []
+        points_to_store = []
 
-        print(f"Deduplication complete: {len(unique_files)} unique images, {len(removed_files)} duplicates removed")
+        for i in range(len(valid_files)):
+            if i in to_remove:
+                continue
+
+            file_info = valid_files[i]
+            embedding = embeddings[i]
+
+            # Generate crop ID
+            crop_id = self._generate_crop_id(file_info["filename"], video_id)
+
+            # Query similar fashion products
+            fashion_matches = self._query_fashion_products(embedding, limit=5)
+
+            # Add fashion matches to file info
+            file_info["fashion_matches"] = fashion_matches
+            file_info["crop_id"] = crop_id
+
+            # Prepare point for Qdrant storage
+            metadata = {
+                "filename": file_info["filename"],
+                "class_name": file_info.get("class_name", "unknown"),
+                "original_class_name": file_info.get("original_class_name", "unknown"),
+                "bbox": file_info.get("bbox", []),
+                "video_id": video_id,
+                "file_path": str(cropped_dir / file_info["filename"]),
+            }
+
+            point = PointStruct(id=crop_id, vector=embedding.tolist(), payload=metadata)
+            points_to_store.append(point)
+            unique_files.append(file_info)
+
+        # Store embeddings in Qdrant using video_id as collection name
+        if points_to_store:
+            try:
+                self.client.upsert(
+                    collection_name=collection_name, points=points_to_store
+                )
+                print(
+                    f"Stored {len(points_to_store)} embeddings in Qdrant collection: {collection_name}"
+                )
+            except Exception as e:
+                print(f"Error storing embeddings in Qdrant: {e}")
+
+        print(
+            f"Deduplication complete: {len(unique_files)} unique images, {len(removed_files)} duplicates removed"
+        )
 
         # Cleanup
         if DEVICE == "cuda":
