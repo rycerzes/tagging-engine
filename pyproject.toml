@@ -17,6 +17,7 @@ dependencies = [
     "python-dotenv>=1.1.0",
     "qdrant-client>=1.14.2",
     "sam2>=1.1.0",
+    "scenedetect[opencv-headless]>=0.6.6",
     "supervision>=0.25.1",
     "torch>=2.6.0",
     "transformers[torch]>=4.51.3",
