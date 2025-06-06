@@ -72,13 +72,9 @@ async def upload_video(
             logger.info("Using Gemini for text prompt generation")
             if file_extension == "mp4":
                 text_prompt = gemini_service.generate_text_prompt_from_video(file_path)
-            else:
-                text_prompt = gemini_service.generate_text_prompt_from_image(file_path)
-            
-            # Process file based on type
-            if file_extension == "mp4":
                 result = video_service.process_video(file_path, video_id, text_prompt)
             else:
+                text_prompt = gemini_service.generate_text_prompt_from_image(file_path)
                 result = video_service.process_image(file_path, video_id, text_prompt)
         else:
             logger.info("Using default text prompt and performing concurrent content analysis")
@@ -120,6 +116,17 @@ async def upload_video(
                 audio_transcription=analysis_result.get("audio_transcription"),
                 clothing_description=analysis_result.get("clothing_description", ""),
                 vibes=vibes
+            )
+
+        # Handle async Qdrant storage after getting results
+        points_to_store = result.get("points_to_store", [])
+        if points_to_store:
+            collection_name = video_id
+            video_service.deduplication_service._setup_collection(collection_name)
+            asyncio.create_task(
+                video_service.deduplication_service._store_embeddings_async(
+                    points_to_store, collection_name
+                )
             )
         
         os.remove(file_path)

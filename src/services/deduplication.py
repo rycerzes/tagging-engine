@@ -11,6 +11,7 @@ from qdrant_client.models import Distance, VectorParams, PointStruct
 from urllib.parse import urlparse
 import hashlib
 from dotenv import load_dotenv
+import asyncio
 
 from ..config import DEVICE
 
@@ -85,7 +86,7 @@ class FaissDeduplicationService:
         return image_features.cpu().numpy().flatten()
 
     def _query_fashion_products(
-        self, embedding: np.ndarray, limit: int = 5
+        self, embedding: np.ndarray, limit: int = 2
     ) -> List[Dict[str, Any]]:
         """Query similar products from fashion_products collection"""
         try:
@@ -93,7 +94,7 @@ class FaissDeduplicationService:
                 collection_name=self.fashion_products_collection,
                 query=embedding.tolist(),
                 limit=limit,
-                score_threshold=0.5,
+                score_threshold=0.75,
                 with_payload=True,
             )
 
@@ -119,10 +120,10 @@ class FaissDeduplicationService:
         video_id: str = None,
     ) -> Tuple[List[Dict[str, Any]], List[str]]:
         """
-        Deduplicate cropped images using FAISS similarity search and store in Qdrant
+        Deduplicate cropped images using FAISS similarity search
 
         Returns:
-            - List of unique cropped files (deduplicated) with fashion product matches
+            - List of unique cropped files (deduplicated)
             - List of filenames that were removed as duplicates
         """
         if not cropped_files:
@@ -230,7 +231,7 @@ class FaissDeduplicationService:
                 os.remove(file_path)
                 print(f"Removed duplicate: {filename}")
 
-        # Process unique files - store in Qdrant and query fashion products
+        # Process unique files - prepare for Qdrant storage
         unique_files = []
         points_to_store = []
 
@@ -243,12 +244,6 @@ class FaissDeduplicationService:
 
             # Generate crop ID
             crop_id = self._generate_crop_id(file_info["filename"], video_id)
-
-            # Query similar fashion products
-            fashion_matches = self._query_fashion_products(embedding, limit=5)
-
-            # Add fashion matches to file info
-            file_info["fashion_matches"] = fashion_matches
             file_info["crop_id"] = crop_id
 
             # Prepare point for Qdrant storage
@@ -265,18 +260,6 @@ class FaissDeduplicationService:
             points_to_store.append(point)
             unique_files.append(file_info)
 
-        # Store embeddings in Qdrant using video_id as collection name
-        if points_to_store:
-            try:
-                self.client.upsert(
-                    collection_name=collection_name, points=points_to_store
-                )
-                print(
-                    f"Stored {len(points_to_store)} embeddings in Qdrant collection: {collection_name}"
-                )
-            except Exception as e:
-                print(f"Error storing embeddings in Qdrant: {e}")
-
         print(
             f"Deduplication complete: {len(unique_files)} unique images, {len(removed_files)} duplicates removed"
         )
@@ -285,4 +268,22 @@ class FaissDeduplicationService:
         if DEVICE == "cuda":
             torch.cuda.empty_cache()
 
-        return unique_files, removed_files
+        return unique_files, removed_files, points_to_store
+
+    async def _store_embeddings_async(
+        self, points_to_store: List, collection_name: str
+    ) -> None:
+        """Asynchronously store embeddings in Qdrant"""
+        try:
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(
+                None,
+                lambda: self.client.upsert(
+                    collection_name=collection_name, points=points_to_store
+                ),
+            )
+            print(
+                f"Stored {len(points_to_store)} embeddings in Qdrant collection: {collection_name}"
+            )
+        except Exception as e:
+            print(f"Error storing embeddings in Qdrant: {e}")

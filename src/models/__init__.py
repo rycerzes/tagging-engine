@@ -6,6 +6,9 @@ from .responses import (
     CroppedKeyframeResponse,
     ContentAnalysis,
     VibeAnalysis,
+    FashionMatch,
+    CropMatch,
+    VideoQueryResponse
 )
 
 __all__ = [
@@ -16,4 +19,7 @@ __all__ = [
     "CroppedKeyframeResponse",
     "ContentAnalysis",
     "VibeAnalysis",
+    "FashionMatch",
+    "CropMatch",
+    "VideoQueryResponse"
 ]

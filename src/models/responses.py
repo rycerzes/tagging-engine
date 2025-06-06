@@ -61,3 +61,23 @@ class CroppedKeyframeListItem(BaseModel):
 class CroppedKeyframeListResponse(BaseModel):
     video_id: str
     cropped_keyframes: List[CroppedKeyframeListItem]
+
+class FashionMatch(BaseModel):
+    product_id: str
+    score: float
+    payload: Dict[str, Any]
+
+
+class CropMatch(BaseModel):
+    crop_id: str
+    filename: str
+    class_name: str
+    original_class_name: str
+    bbox: List[float]
+    fashion_matches: List[FashionMatch]
+
+
+class VideoQueryResponse(BaseModel):
+    video_id: str
+    total_crops: int
+    crop_matches: List[CropMatch]

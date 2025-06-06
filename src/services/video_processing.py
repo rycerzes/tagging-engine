@@ -77,9 +77,10 @@ class VideoProcessingService:
         cap.release()
 
         # Deduplicate cropped images using FAISS
+        points_to_store = []
         if all_cropped_files:
             print("Starting deduplication of cropped images...")
-            unique_cropped_files, removed_duplicates = self.deduplication_service.deduplicate_crops(
+            unique_cropped_files, removed_duplicates, points_to_store = self.deduplication_service.deduplicate_crops(
                 cropped_keyframes_path, all_cropped_files, video_id
             )
             all_cropped_files = unique_cropped_files
@@ -89,6 +90,7 @@ class VideoProcessingService:
             "keyframe_files": keyframe_files,
             "cropped_files": all_cropped_files,
             "masked_files": all_masked_files,
+            "points_to_store": points_to_store,
         }
 
     def process_image(
@@ -144,9 +146,10 @@ class VideoProcessingService:
             print(f"Failed to process image with Grounding DINO: {e}")
 
         # Deduplicate cropped images using FAISS
+        points_to_store = []
         if all_cropped_files:
             print("Starting deduplication of cropped images...")
-            unique_cropped_files, removed_duplicates = self.deduplication_service.deduplicate_crops(
+            unique_cropped_files, removed_duplicates, points_to_store = self.deduplication_service.deduplicate_crops(
                 cropped_keyframes_path, all_cropped_files, video_id
             )
             all_cropped_files = unique_cropped_files
@@ -156,4 +159,5 @@ class VideoProcessingService:
             "keyframe_files": keyframe_files,
             "cropped_files": all_cropped_files,
             "masked_files": all_masked_files,
+            "points_to_store": points_to_store,
         }

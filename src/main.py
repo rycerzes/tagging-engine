@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from src.routes import health, upload
+from src.routes import health, upload, query
 
 app = FastAPI(
     title="Tagging Engine API",
@@ -19,6 +19,7 @@ app.add_middleware(
 # Include routers
 app.include_router(health.router)
 app.include_router(upload.router)
+app.include_router(query.router)
 
 
 # Health check endpoint
