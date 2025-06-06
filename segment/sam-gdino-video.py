@@ -84,6 +84,9 @@ frame_names.sort(key=lambda p: int(os.path.splitext(p)[0]))
 with torch.inference_mode(), torch.autocast("cuda", dtype=torch.bfloat16):
     inference_state = video_predictor.init_state(video_path=SOURCE_VIDEO_FRAME_DIR)
 
+    # Reset state to ensure clean inference (important for multiple object tracking)
+    video_predictor.reset_state(inference_state)
+
     ann_frame_idx = 0  # the frame index we interact with
     """
     Step 2: Prompt Grounding DINO for box coordinates
@@ -108,15 +111,24 @@ with torch.inference_mode(), torch.autocast("cuda", dtype=torch.bfloat16):
     confidences = results[0]["scores"].cpu().numpy().tolist()
     class_names = results[0]["text_labels"]
 
-    print(input_boxes)
+    print(f"Detected {len(input_boxes)} objects: {class_names}")
+    print("Bounding boxes:", input_boxes)
+    print("Confidences:", confidences)
 
     # prompt SAM image predictor to get the mask for the object
     image_predictor.set_image(np.array(image.convert("RGB")))
 
+    # Create unique object identifiers for multiple instances of same class
+    OBJECTS = []
+    for i, (class_name, confidence) in enumerate(zip(class_names, confidences)):
+        # Create unique identifier for each detection instance
+        unique_name = f"{class_name}_{i+1}" if class_names.count(class_name) > 1 else class_name
+        OBJECTS.append(unique_name)
+    
+    print(f"Unique object identifiers: {OBJECTS}")
+
     # process the detection results
     OBJECTS = class_names
-
-    print(OBJECTS)
 
     # prompt SAM 2 image predictor to get the mask for the object
     masks, scores, logits = image_predictor.predict(
@@ -130,52 +142,78 @@ with torch.inference_mode(), torch.autocast("cuda", dtype=torch.bfloat16):
         masks = masks.squeeze(1)
 
     """
-    Step 3: Register each object's positive points to video predictor with seperate add_new_points call
+    Step 3: Register multiple objects simultaneously to video predictor
     """
 
     assert PROMPT_TYPE_FOR_VIDEO in ["point", "box", "mask"], (
         "SAM 2 video predictor only support point/box/mask prompt"
     )
 
-    # If you are using point prompts, we uniformly sample positive points based on the mask
+    # Store prompts for visualization and tracking
+    prompts = {}  # hold all the clicks we add for visualization
+
+    # Process multiple objects simultaneously
     if PROMPT_TYPE_FOR_VIDEO == "point":
         # sample the positive points from mask for each objects
         all_sample_points = sample_points_from_masks(masks=masks, num_points=10)
 
+        # Add all objects with point prompts
         for object_id, (label, points) in enumerate(
             zip(OBJECTS, all_sample_points), start=1
         ):
             labels = np.ones((points.shape[0]), dtype=np.int32)
-            frame_idx, out_obj_ids, out_mask_logits = video_predictor.add_new_points(
-                inference_state,
-                frame_idx=ann_frame_idx,
-                obj_id=object_id,
-                points=points,
-                labels=labels,
+            prompts[object_id] = points, labels
+
+            # Add each object to the video predictor
+            frame_idx, out_obj_ids, out_mask_logits = (
+                video_predictor.add_new_points_or_box(
+                    inference_state,
+                    frame_idx=ann_frame_idx,
+                    obj_id=object_id,
+                    points=points,
+                    labels=labels,
+                )
             )
-    # Using box prompt
+            print(f"Added object {object_id} ({label}) with {len(points)} points")
+
     elif PROMPT_TYPE_FOR_VIDEO == "box":
+        # Add all objects with box prompts - ensure we process ALL detected boxes
         for object_id, (label, box) in enumerate(zip(OBJECTS, input_boxes), start=1):
-            frame_idx, out_obj_ids, out_mask_logits = video_predictor.add_new_points(
-                inference_state,
-                frame_idx=ann_frame_idx,
-                obj_id=object_id,
-                box=box,
+            prompts[object_id] = box, None  # Store box for visualization
+
+            # Add each object to the video predictor
+            frame_idx, out_obj_ids, out_mask_logits = (
+                video_predictor.add_new_points_or_box(
+                    inference_state,
+                    frame_idx=ann_frame_idx,
+                    obj_id=object_id,
+                    box=box,
+                )
             )
-    # Using mask prompt is a more straightforward way
+            print(f"Added object {object_id} ({label}) with box prompt")
+
     elif PROMPT_TYPE_FOR_VIDEO == "mask":
+        # Add all objects with mask prompts - ensure we process ALL detected masks
         for object_id, (label, mask) in enumerate(zip(OBJECTS, masks), start=1):
+            prompts[object_id] = mask, None  # Store mask for visualization
+
+            # Add each object to the video predictor
             frame_idx, out_obj_ids, out_mask_logits = video_predictor.add_new_mask(
                 inference_state, frame_idx=ann_frame_idx, obj_id=object_id, mask=mask
             )
+            print(f"Added object {object_id} ({label}) with mask prompt")
+
     else:
         raise NotImplementedError(
             "SAM 2 video predictor only support point/box/mask prompts"
         )
 
+    print(f"Successfully added {len(OBJECTS)} objects for tracking")
+
     """
     Step 4: Propagate the video predictor to get the segmentation results for each frame
     """
+    print("Propagating segmentation across video frames...")
     video_segments = {}  # video_segments contains the per-frame segmentation results
     for (
         out_frame_idx,
@@ -186,6 +224,8 @@ with torch.inference_mode(), torch.autocast("cuda", dtype=torch.bfloat16):
             out_obj_id: (out_mask_logits[i] > 0.0).cpu().numpy()
             for i, out_obj_id in enumerate(out_obj_ids)
         }
+
+    print(f"Segmentation completed for {len(video_segments)} frames")
 
 """
 Step 5: Visualize the segment results across the video and save them
