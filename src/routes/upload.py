@@ -1,4 +1,5 @@
 import os
+import logging
 
 from fastapi import APIRouter, File, UploadFile, HTTPException, Depends
 from fastapi.responses import FileResponse
@@ -19,6 +20,8 @@ from ..models import (
 )
 
 router = APIRouter(tags=["upload"])
+
+logger = logging.getLogger(__name__)
 
 
 def get_video_service() -> VideoProcessingService:
@@ -55,8 +58,10 @@ async def upload_video(
     try:
         # Generate dynamic text prompt using Gemini if enabled
         if USE_GEMINI_FOR_TEXT_PROMPT:
+            logger.info("Using Gemini for text prompt generation")
             text_prompt = gemini_service.generate_text_prompt(video_path)
         else:
+            logger.info("Using default text prompt (Gemini disabled)")
             text_prompt = TEXT_PROMPT
 
         # Process video with the generated or default prompt

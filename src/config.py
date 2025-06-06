@@ -22,7 +22,7 @@ SAM2_MODEL = "facebook/sam2.1-hiera-base-plus"
 # Gemini configuration
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 GEMINI_MODEL = "gemini-2.5-flash-preview-05-20"
-USE_GEMINI_FOR_TEXT_PROMPT = "false"
+USE_GEMINI_FOR_TEXT_PROMPT = False
 
 # Default text prompt for object detection
 # This can be overridden by Gemini if USE_GEMINI_FOR_TEXT_PROMPT is true

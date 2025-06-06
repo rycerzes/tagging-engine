@@ -13,11 +13,14 @@ class GeminiService:
         if not GEMINI_API_KEY:
             raise ValueError("GEMINI_API_KEY environment variable is required")
 
+        logger.info(f"Loading Gemini model: {GEMINI_MODEL}")
         genai.configure(api_key=GEMINI_API_KEY)
         self.model = genai.GenerativeModel(GEMINI_MODEL)
+        logger.info("Gemini service initialized successfully")
 
     def generate_text_prompt(self, video_path: Path) -> str:
         """Generate a text prompt for object detection based on video content."""
+        logger.info("Starting Gemini text prompt generation")
         try:
             logger.info(f"Uploading video to Gemini: {video_path}")
             video_file = genai.upload_file(str(video_path))
