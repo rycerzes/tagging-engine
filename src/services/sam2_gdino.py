@@ -13,6 +13,7 @@ from ..config import (
     DEVICE,
     BOX_THRESHOLD,
     TEXT_THRESHOLD,
+    ENABLE_MASKING,
 )
 
 
@@ -35,7 +36,8 @@ class Sam2GroundingDinoService:
                 low_cpu_mem_usage=True,
             ).to(DEVICE)
 
-        if self._sam2_predictor is None:
+        # Only load SAM2 if masking is enabled
+        if ENABLE_MASKING and self._sam2_predictor is None:
             print(f"Loading SAM2 model: {SAM2_MODEL}")
             self._sam2_predictor = SAM2ImagePredictor.from_pretrained(
                 SAM2_MODEL, device=DEVICE
@@ -107,19 +109,23 @@ class Sam2GroundingDinoService:
         input_boxes = results[0]["boxes"].cpu().numpy()
         class_names = results[0]["text_labels"]
 
-        # SAM2 inference for masks
-        sam2_predictor.set_image(np.array(image))
-        with torch.no_grad():
-            masks, scores, _ = sam2_predictor.predict(
-                point_coords=None,
-                point_labels=None,
-                box=input_boxes,
-                multimask_output=False,
-            )
+        # SAM2 inference for masks (only if masking is enabled)
+        masks = None
+        if ENABLE_MASKING:
+            if sam2_predictor is None:
+                raise RuntimeError("SAM2 predictor not loaded but masking is enabled")
+            sam2_predictor.set_image(np.array(image))
+            with torch.no_grad():
+                masks, scores, _ = sam2_predictor.predict(
+                    point_coords=None,
+                    point_labels=None,
+                    box=input_boxes,
+                    multimask_output=False,
+                )
 
-        # Convert masks shape if needed
-        if masks.ndim == 4:
-            masks = masks.squeeze(1)
+            # Convert masks shape if needed
+            if masks.ndim == 4:
+                masks = masks.squeeze(1)
 
         # Track counts for each class to create unique names
         class_counts = {}
@@ -139,8 +145,8 @@ class Sam2GroundingDinoService:
         masked_files = []
         keyframe_stem = keyframe_path.stem
 
-        for original_class_name, unique_class_name, bbox, mask in zip(
-            class_names, unique_class_names, input_boxes, masks
+        for i, (original_class_name, unique_class_name, bbox) in enumerate(
+            zip(class_names, unique_class_names, input_boxes)
         ):
             # Regular crop
             cropped_img = self._crop_image_with_bbox(image, bbox)
@@ -157,22 +163,24 @@ class Sam2GroundingDinoService:
                 }
             )
 
-            # Masked crop
-            masked_img = self._crop_image_with_mask(image, mask, bbox)
-            masked_filename = (
-                f"{unique_class_name.replace(' ', '_')}-{keyframe_stem}-masked.png"
-            )
-            masked_path = masked_output_dir / masked_filename
-            masked_img.save(masked_path)
+            # Masked crop (only if masking is enabled)
+            if ENABLE_MASKING and masks is not None:
+                mask = masks[i]
+                masked_img = self._crop_image_with_mask(image, mask, bbox)
+                masked_filename = (
+                    f"{unique_class_name.replace(' ', '_')}-{keyframe_stem}-masked.png"
+                )
+                masked_path = masked_output_dir / masked_filename
+                masked_img.save(masked_path)
 
-            masked_files.append(
-                {
-                    "filename": masked_filename,
-                    "class_name": unique_class_name,
-                    "original_class_name": original_class_name,
-                    "bbox": bbox.tolist(),
-                }
-            )
+                masked_files.append(
+                    {
+                        "filename": masked_filename,
+                        "class_name": unique_class_name,
+                        "original_class_name": original_class_name,
+                        "bbox": bbox.tolist(),
+                    }
+                )
 
         # Cleanup
         del inputs, outputs

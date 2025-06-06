@@ -4,7 +4,7 @@ from pathlib import Path
 from scenedetect import detect, ContentDetector
 from PIL import Image
 
-from ..config import KEYFRAMES_DIR, CROPPED_KEYFRAMES_DIR, MASKED_KEYFRAMES_DIR
+from ..config import KEYFRAMES_DIR, CROPPED_KEYFRAMES_DIR, MASKED_KEYFRAMES_DIR, ENABLE_MASKING
 from .sam2_gdino import Sam2GroundingDinoService
 
 

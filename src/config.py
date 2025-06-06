@@ -18,6 +18,8 @@ GROUNDING_MODEL = "IDEA-Research/grounding-dino-tiny"
 
 # SAM2 configuration
 SAM2_MODEL = "facebook/sam2.1-hiera-base-plus"
+# Masking configuration
+ENABLE_MASKING = False   
 
 # Gemini configuration
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
