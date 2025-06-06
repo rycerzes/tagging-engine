@@ -40,33 +40,46 @@ async def upload_video(
     video_service: VideoProcessingService = Depends(get_video_service),
     gemini_service: GeminiService = Depends(get_gemini_service),
 ):
-    """Upload an MP4 video and generate keyframes from scene detection."""
-    if not file.filename.endswith(".mp4"):
-        raise HTTPException(status_code=400, detail="Only MP4 files are supported")
+    """Upload an MP4 video or image (JPG/JPEG/PNG) and generate keyframes/crops."""
+    file_extension = file.filename.lower().split('.')[-1]
+    supported_extensions = ["mp4", "jpg", "jpeg", "png"]
+    
+    if file_extension not in supported_extensions:
+        raise HTTPException(
+            status_code=400, 
+            detail="Only MP4 videos and JPG/JPEG/PNG images are supported"
+        )
 
     video_id = video_service.get_next_video_id()
-    video_name = f"{video_id}_{file.filename}"
-    video_path = UPLOAD_DIR / video_name
+    file_name = f"{video_id}_{file.filename}"
+    file_path = UPLOAD_DIR / file_name
 
     try:
         content = await file.read()
-        with open(video_path, "wb") as f:
+        with open(file_path, "wb") as f:
             f.write(content)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to save video: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to save file: {str(e)}")
 
     try:
         # Generate dynamic text prompt using Gemini if enabled
         if USE_GEMINI_FOR_TEXT_PROMPT:
             logger.info("Using Gemini for text prompt generation")
-            text_prompt = gemini_service.generate_text_prompt(video_path)
+            if file_extension == "mp4":
+                text_prompt = gemini_service.generate_text_prompt_from_video(file_path)
+            else:
+                text_prompt = gemini_service.generate_text_prompt_from_image(file_path)
         else:
             logger.info("Using default text prompt (Gemini disabled)")
             text_prompt = TEXT_PROMPT
 
-        # Process video with the generated or default prompt
-        result = video_service.process_video(video_path, video_id, text_prompt)
-        os.remove(video_path)
+        # Process file based on type
+        if file_extension == "mp4":
+            result = video_service.process_video(file_path, video_id, text_prompt)
+        else:
+            result = video_service.process_image(file_path, video_id, text_prompt)
+        
+        os.remove(file_path)
 
         return UploadVideoResponse(
             video_id=video_id,
@@ -84,10 +97,10 @@ async def upload_video(
         )
 
     except Exception as e:
-        if video_path.exists():
-            os.remove(video_path)
+        if file_path.exists():
+            os.remove(file_path)
         raise HTTPException(
-            status_code=500, detail=f"Failed to process video: {str(e)}"
+            status_code=500, detail=f"Failed to process file: {str(e)}"
         )
 
 

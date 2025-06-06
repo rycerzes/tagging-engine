@@ -2,6 +2,7 @@ import cv2
 from typing import Dict, Any
 from pathlib import Path
 from scenedetect import detect, ContentDetector
+from PIL import Image
 
 from ..config import KEYFRAMES_DIR, CROPPED_KEYFRAMES_DIR, MASKED_KEYFRAMES_DIR
 from .sam2_gdino import Sam2GroundingDinoService
@@ -75,6 +76,65 @@ class VideoProcessingService:
 
         return {
             "scenes_detected": len(scene_list),
+            "keyframe_files": keyframe_files,
+            "cropped_files": all_cropped_files,
+            "masked_files": all_masked_files,
+        }
+
+    def process_image(
+        self, image_path: Path, video_id: str, text_prompt: str = None
+    ) -> Dict[str, Any]:
+        """Process a single image to generate crops (treats image as single keyframe)"""
+        keyframes_path = KEYFRAMES_DIR / video_id
+        keyframes_path.mkdir(exist_ok=True)
+
+        cropped_keyframes_path = CROPPED_KEYFRAMES_DIR / video_id
+        cropped_keyframes_path.mkdir(exist_ok=True)
+
+        masked_keyframes_path = MASKED_KEYFRAMES_DIR / video_id
+        masked_keyframes_path.mkdir(exist_ok=True)
+
+        # Copy image as keyframe
+        keyframe_filename = "keyframe_000.jpg"
+        keyframe_path = keyframes_path / keyframe_filename
+
+        # Convert to RGB if needed and save as JPEG
+        with Image.open(image_path) as img:
+            if img.mode in ("RGBA", "LA"):
+                # Convert RGBA/LA to RGB with white background
+                background = Image.new("RGB", img.size, (255, 255, 255))
+                if img.mode == "RGBA":
+                    background.paste(img, mask=img.split()[-1])
+                else:
+                    background.paste(img, mask=img.split()[-1])
+                img = background
+            elif img.mode != "RGB":
+                img = img.convert("RGB")
+
+            img.save(keyframe_path, "JPEG")
+
+        keyframe_files = [
+            {
+                "filename": keyframe_filename,
+                "timecode": "00:00:00.000",
+            }
+        ]
+
+        all_cropped_files = []
+        all_masked_files = []
+
+        # Process keyframe with Grounding DINO and SAM2
+        try:
+            result = self.grounding_service.process_keyframe(
+                keyframe_path, cropped_keyframes_path, masked_keyframes_path, text_prompt
+            )
+            all_cropped_files.extend(result["cropped_files"])
+            all_masked_files.extend(result["masked_files"])
+        except Exception as e:
+            print(f"Failed to process image with Grounding DINO: {e}")
+
+        return {
+            "scenes_detected": 1,  # Single image = 1 "scene"
             "keyframe_files": keyframe_files,
             "cropped_files": all_cropped_files,
             "masked_files": all_masked_files,

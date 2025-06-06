@@ -2,6 +2,7 @@ import google.generativeai as genai
 import time
 from pathlib import Path
 import logging
+from PIL import Image
 
 from ..config import GEMINI_API_KEY, GEMINI_MODEL, TEXT_PROMPT
 
@@ -18,9 +19,9 @@ class GeminiService:
         self.model = genai.GenerativeModel(GEMINI_MODEL)
         logger.info("Gemini service initialized successfully")
 
-    def generate_text_prompt(self, video_path: Path) -> str:
+    def generate_text_prompt_from_video(self, video_path: Path) -> str:
         """Generate a text prompt for object detection based on video content."""
-        logger.info("Starting Gemini text prompt generation")
+        logger.info("Starting Gemini text prompt generation from video")
         try:
             logger.info(f"Uploading video to Gemini: {video_path}")
             video_file = genai.upload_file(str(video_path))
@@ -56,7 +57,7 @@ class GeminiService:
                 if not generated_prompt.endswith("."):
                     generated_prompt += "."
 
-                logger.info(f"Generated text prompt: {generated_prompt}")
+                logger.info(f"Generated text prompt from video: {generated_prompt}")
 
                 # Clean up the uploaded file
                 genai.delete_file(video_file.name)
@@ -68,5 +69,49 @@ class GeminiService:
                 return TEXT_PROMPT
 
         except Exception as e:
-            logger.error(f"Error generating text prompt with Gemini: {str(e)}")
+            logger.error(f"Error generating text prompt from video with Gemini: {str(e)}")
             return TEXT_PROMPT
+
+    def generate_text_prompt_from_image(self, image_path: Path) -> str:
+        """Generate a text prompt for object detection based on image content."""
+        logger.info("Starting Gemini text prompt generation from image")
+        try:
+            logger.info(f"Processing image with Gemini: {image_path}")
+            
+            # Load and prepare image
+            image = Image.open(image_path)
+            
+            system_prompt = """
+            Analyze this image and identify the main objects that should be detected for fashion/style tagging.
+            Focus on wearable items, accessories, and fashion-related objects that are clearly visible in the image.
+            
+            Return a concise list of object categories separated by periods, suitable for object detection.
+            Examples: "watch. sunglasses. hat. shirt. jacket. pants. shoes. bag. necklace. ring."
+            
+            Keep it focused on the most prominent and relevant items visible in the image.
+            Use simple, clear object names that an object detection model would understand.
+            Only include objects that are actually visible and prominent in the image.
+            """
+
+            response = self.model.generate_content([system_prompt, image])
+
+            generated_prompt = response.text.strip()
+
+            if generated_prompt and len(generated_prompt) > 5:
+                if not generated_prompt.endswith("."):
+                    generated_prompt += "."
+
+                logger.info(f"Generated text prompt from image: {generated_prompt}")
+                return generated_prompt
+            else:
+                logger.warning("Generated prompt is too short, using default")
+                return TEXT_PROMPT
+
+        except Exception as e:
+            logger.error(f"Error generating text prompt from image with Gemini: {str(e)}")
+            return TEXT_PROMPT
+
+    # Keep backward compatibility
+    def generate_text_prompt(self, video_path: Path) -> str:
+        """Legacy method - defaults to video processing"""
+        return self.generate_text_prompt_from_video(video_path)
