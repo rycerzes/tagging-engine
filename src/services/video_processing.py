@@ -17,7 +17,9 @@ class VideoProcessingService:
         self._video_counter += 1
         return f"video_{self._video_counter:04d}"
 
-    def process_video(self, video_path: Path, video_id: str) -> Dict[str, Any]:
+    def process_video(
+        self, video_path: Path, video_id: str, text_prompt: str = None
+    ) -> Dict[str, Any]:
         """Process video to extract keyframes and generate crops"""
         keyframes_path = KEYFRAMES_DIR / video_id
         keyframes_path.mkdir(exist_ok=True)
@@ -60,7 +62,7 @@ class VideoProcessingService:
                 # Process keyframe with Grounding DINO and SAM2
                 try:
                     result = self.grounding_service.process_keyframe(
-                        keyframe_path, cropped_keyframes_path, masked_keyframes_path
+                        keyframe_path, cropped_keyframes_path, masked_keyframes_path, text_prompt
                     )
                     all_cropped_files.extend(result["cropped_files"])
                     all_masked_files.extend(result["masked_files"])

@@ -1,5 +1,9 @@
 import torch
+import os
 from pathlib import Path
+import dotenv
+
+dotenv.load_dotenv()
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -15,7 +19,15 @@ GROUNDING_MODEL = "IDEA-Research/grounding-dino-tiny"
 # SAM2 configuration
 SAM2_MODEL = "facebook/sam2.1-hiera-base-plus"
 
-TEXT_PROMPT = "watch. topwear. bottomwear. shoes. headgear."
+# Gemini configuration
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+GEMINI_MODEL = "gemini-2.5-flash-preview-05-20"
+USE_GEMINI_FOR_TEXT_PROMPT = "false"
+
+# Default text prompt for object detection
+# This can be overridden by Gemini if USE_GEMINI_FOR_TEXT_PROMPT is true
+TEXT_PROMPT = """wristwear. topwear. bottomwear. footwear. 
+headgear. accessories. bag. outerwear."""
 
 # Detection thresholds
 BOX_THRESHOLD = 0.4

@@ -8,8 +8,10 @@ from ..config import (
     KEYFRAMES_DIR,
     CROPPED_KEYFRAMES_DIR,
     MASKED_KEYFRAMES_DIR,
+    USE_GEMINI_FOR_TEXT_PROMPT,
+    TEXT_PROMPT,
 )
-from ..services import VideoProcessingService
+from ..services import VideoProcessingService, GeminiService
 from ..models import (
     UploadVideoResponse,
     KeyframeListResponse,
@@ -24,10 +26,16 @@ def get_video_service() -> VideoProcessingService:
     return VideoProcessingService()
 
 
+def get_gemini_service() -> GeminiService:
+    """Dependency to get Gemini service"""
+    return GeminiService()
+
+
 @router.post("/upload", response_model=UploadVideoResponse)
 async def upload_video(
     file: UploadFile = File(...),
     video_service: VideoProcessingService = Depends(get_video_service),
+    gemini_service: GeminiService = Depends(get_gemini_service),
 ):
     """Upload an MP4 video and generate keyframes from scene detection."""
     if not file.filename.endswith(".mp4"):
@@ -45,7 +53,14 @@ async def upload_video(
         raise HTTPException(status_code=500, detail=f"Failed to save video: {str(e)}")
 
     try:
-        result = video_service.process_video(video_path, video_id)
+        # Generate dynamic text prompt using Gemini if enabled
+        if USE_GEMINI_FOR_TEXT_PROMPT:
+            text_prompt = gemini_service.generate_text_prompt(video_path)
+        else:
+            text_prompt = TEXT_PROMPT
+
+        # Process video with the generated or default prompt
+        result = video_service.process_video(video_path, video_id, text_prompt)
         os.remove(video_path)
 
         return UploadVideoResponse(
