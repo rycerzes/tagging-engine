@@ -17,7 +17,7 @@ from utils.video_utils import create_video_from_images
 Hyperparam for Ground and Tracking
 """
 MODEL_ID = "IDEA-Research/grounding-dino-tiny"
-SAM2_MODEL = "facebook/sam2-hiera-small"
+SAM2_MODEL = "facebook/sam2.1-hiera-small"
 VIDEO_PATH = (
     "/root/flickd-ai/tagging-engine/data/raw/videos/2025-05-27_13-46-16_UTC.mp4"
 )

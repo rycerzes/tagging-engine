@@ -18,7 +18,7 @@ Hyper parameters
 """
 parser = argparse.ArgumentParser()
 parser.add_argument("--grounding-model", default="IDEA-Research/grounding-dino-tiny")
-parser.add_argument("--sam2-model", default="facebook/sam2-hiera-base-plus")
+parser.add_argument("--sam2-model", default="facebook/sam2.1-hiera-base-plus")
 parser.add_argument("--text-prompt", default="watch. topwear. bottomwear. shoes. headgear.")
 parser.add_argument(
     "--img-path",
