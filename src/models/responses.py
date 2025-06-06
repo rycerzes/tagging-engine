@@ -24,6 +24,9 @@ class UploadVideoResponse(BaseModel):
     cropped_keyframes_generated: int
     cropped_keyframes: List[CroppedKeyframeResponse]
     cropped_keyframes_url: str
+    masked_keyframes_generated: int
+    masked_keyframes: List[CroppedKeyframeResponse]
+    masked_keyframes_url: str
 
 
 class KeyframeListItem(BaseModel):

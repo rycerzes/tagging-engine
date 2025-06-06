@@ -8,7 +8,7 @@ from .responses import (
 
 __all__ = [
     "UploadVideoResponse",
-    "KeyframeListResponse", 
+    "KeyframeListResponse",
     "CroppedKeyframeListResponse",
     "KeyframeResponse",
     "CroppedKeyframeResponse",

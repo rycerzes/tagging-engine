@@ -3,13 +3,13 @@ from typing import Dict, Any
 from pathlib import Path
 from scenedetect import detect, ContentDetector
 
-from ..config import KEYFRAMES_DIR, CROPPED_KEYFRAMES_DIR
-from .grounding_dino import GroundingDinoService
+from ..config import KEYFRAMES_DIR, CROPPED_KEYFRAMES_DIR, MASKED_KEYFRAMES_DIR
+from .sam2_gdino import Sam2GroundingDinoService
 
 
 class VideoProcessingService:
     def __init__(self):
-        self.grounding_service = GroundingDinoService()
+        self.grounding_service = Sam2GroundingDinoService()
         self._video_counter = 0
 
     def get_next_video_id(self) -> str:
@@ -25,6 +25,9 @@ class VideoProcessingService:
         cropped_keyframes_path = CROPPED_KEYFRAMES_DIR / video_id
         cropped_keyframes_path.mkdir(exist_ok=True)
 
+        masked_keyframes_path = MASKED_KEYFRAMES_DIR / video_id
+        masked_keyframes_path.mkdir(exist_ok=True)
+
         # Scene detection
         scene_list = detect(str(video_path), ContentDetector())
 
@@ -33,6 +36,7 @@ class VideoProcessingService:
 
         keyframe_files = []
         all_cropped_files = []
+        all_masked_files = []
 
         for i, scene in enumerate(scene_list):
             start_time = scene[0]
@@ -45,20 +49,25 @@ class VideoProcessingService:
                 keyframe_filename = f"keyframe_{i:03d}.jpg"
                 keyframe_path = keyframes_path / keyframe_filename
                 cv2.imwrite(str(keyframe_path), frame)
-                
-                keyframe_files.append({
-                    "filename": keyframe_filename,
-                    "timecode": str(start_time),
-                })
 
-                # Process keyframe with Grounding DINO
+                keyframe_files.append(
+                    {
+                        "filename": keyframe_filename,
+                        "timecode": str(start_time),
+                    }
+                )
+
+                # Process keyframe with Grounding DINO and SAM2
                 try:
-                    cropped_files = self.grounding_service.process_keyframe(
-                        keyframe_path, cropped_keyframes_path
+                    result = self.grounding_service.process_keyframe(
+                        keyframe_path, cropped_keyframes_path, masked_keyframes_path
                     )
-                    all_cropped_files.extend(cropped_files)
+                    all_cropped_files.extend(result["cropped_files"])
+                    all_masked_files.extend(result["masked_files"])
                 except Exception as e:
-                    print(f"Failed to process keyframe {keyframe_filename} with Grounding DINO: {e}")
+                    print(
+                        f"Failed to process keyframe {keyframe_filename} with Grounding DINO: {e}"
+                    )
 
         cap.release()
 
@@ -66,4 +75,5 @@ class VideoProcessingService:
             "scenes_detected": len(scene_list),
             "keyframe_files": keyframe_files,
             "cropped_files": all_cropped_files,
+            "masked_files": all_masked_files,
         }

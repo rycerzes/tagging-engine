@@ -3,7 +3,12 @@ import os
 from fastapi import APIRouter, File, UploadFile, HTTPException, Depends
 from fastapi.responses import FileResponse
 
-from ..config import UPLOAD_DIR, KEYFRAMES_DIR, CROPPED_KEYFRAMES_DIR
+from ..config import (
+    UPLOAD_DIR,
+    KEYFRAMES_DIR,
+    CROPPED_KEYFRAMES_DIR,
+    MASKED_KEYFRAMES_DIR,
+)
 from ..services import VideoProcessingService
 from ..models import (
     UploadVideoResponse,
@@ -53,6 +58,9 @@ async def upload_video(
             cropped_keyframes_generated=len(result["cropped_files"]),
             cropped_keyframes=result["cropped_files"],
             cropped_keyframes_url=f"/upload/{video_id}/keyframes-cropped",
+            masked_keyframes_generated=len(result["masked_files"]),
+            masked_keyframes=result["masked_files"],
+            masked_keyframes_url=f"/upload/{video_id}/keyframes-masked",
         )
 
     except Exception as e:
@@ -129,3 +137,38 @@ async def get_cropped_keyframe(video_id: str, cropped_keyframe_name: str):
         raise HTTPException(status_code=404, detail="Cropped keyframe not found")
 
     return FileResponse(cropped_keyframe_path, media_type="image/png")
+
+
+@router.get(
+    "/upload/{video_id}/keyframes-masked", response_model=CroppedKeyframeListResponse
+)
+async def list_masked_keyframes(video_id: str):
+    """List all masked keyframes for a given video."""
+    masked_keyframes_path = MASKED_KEYFRAMES_DIR / video_id
+
+    if not masked_keyframes_path.exists():
+        raise HTTPException(status_code=404, detail="Video not found")
+
+    masked_keyframes = []
+    for masked_file in sorted(masked_keyframes_path.glob("*.png")):
+        masked_keyframes.append(
+            {
+                "filename": masked_file.name,
+                "url": f"/upload/{video_id}/keyframes-masked/{masked_file.name}",
+            }
+        )
+
+    return CroppedKeyframeListResponse(
+        video_id=video_id, cropped_keyframes=masked_keyframes
+    )
+
+
+@router.get("/upload/{video_id}/keyframes-masked/{masked_keyframe_name}")
+async def get_masked_keyframe(video_id: str, masked_keyframe_name: str):
+    """Serve a specific masked keyframe image."""
+    masked_keyframe_path = MASKED_KEYFRAMES_DIR / video_id / masked_keyframe_name
+
+    if not masked_keyframe_path.exists():
+        raise HTTPException(status_code=404, detail="Masked keyframe not found")
+
+    return FileResponse(masked_keyframe_path, media_type="image/png")
