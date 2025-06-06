@@ -1,304 +1,233 @@
-import argparse
+import os
 import cv2
-import json
 import torch
 import numpy as np
 import supervision as sv
-import pycocotools.mask as mask_util
+
 from pathlib import Path
-from supervision.draw.color import ColorPalette
-from supervision_utils import CUSTOM_COLOR_MAP
+from tqdm import tqdm
 from PIL import Image
-from transformers import AutoProcessor, AutoModelForZeroShotObjectDetection
 from sam2.sam2_video_predictor import SAM2VideoPredictor
+from sam2.sam2_image_predictor import SAM2ImagePredictor
+from transformers import AutoProcessor, AutoModelForZeroShotObjectDetection
+from utils.track_utils import sample_points_from_masks
+from utils.video_utils import create_video_from_images
 
 """
-Hyper parameters
+Hyperparam for Ground and Tracking
 """
-parser = argparse.ArgumentParser()
-parser.add_argument("--grounding-model", default="IDEA-Research/grounding-dino-tiny")
-parser.add_argument("--sam2-model", default="facebook/sam2-hiera-base-plus")
-parser.add_argument("--text-prompt", default="clothing. accessories.")
-parser.add_argument(
-    "--video-path",
-    default="/root/flickd-ai/tagging-engine/data/raw/videos/2025-05-27_13-46-16_UTC.mp4",
+MODEL_ID = "IDEA-Research/grounding-dino-tiny"
+SAM2_MODEL = "facebook/sam2-hiera-small"
+VIDEO_PATH = (
+    "/root/flickd-ai/tagging-engine/data/raw/videos/2025-05-27_13-46-16_UTC.mp4"
 )
-parser.add_argument("--output-dir", default="/root/flickd-ai/tagging-engine/data/processed/grounded_sam2_video_demo")
-parser.add_argument("--no-dump-json", action="store_true")
-parser.add_argument("--force-cpu", action="store_true")
-parser.add_argument("--max-frames", type=int, default=100, help="Maximum number of frames to process")
-parser.add_argument("--frame-stride", type=int, default=1, help="Process every nth frame")
-args = parser.parse_args()
+TEXT_PROMPT = "watch. topwear. bottomwear. shoes. headwear."
+OUTPUT_VIDEO_PATH = "/root/flickd-ai/tagging-engine/data/processed/sam2_gdino_video/sam2_gdino_video.mp4"
+SOURCE_VIDEO_FRAME_DIR = (
+    "/root/flickd-ai/tagging-engine/data/processed/sam2_gdino_video/custom_video_frames"
+)
+SAVE_TRACKING_RESULTS_DIR = (
+    "/root/flickd-ai/tagging-engine/data/processed/sam2_gdino_video/tracking_results"
+)
+PROMPT_TYPE_FOR_VIDEO = "box"  # ["point", "box", "mask"]
 
-GROUNDING_MODEL = args.grounding_model
-SAM2_MODEL = args.sam2_model
-TEXT_PROMPT = args.text_prompt
-VIDEO_PATH = args.video_path
-DEVICE = "cuda" if torch.cuda.is_available() and not args.force_cpu else "cpu"
-OUTPUT_DIR = Path(args.output_dir)
-DUMP_JSON_RESULTS = not args.no_dump_json
-MAX_FRAMES = args.max_frames
-FRAME_STRIDE = args.frame_stride
+"""
+Step 1: Environment settings and model initialization for SAM 2
+"""
+device = "cuda" if torch.cuda.is_available() else "cpu"
 
-OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-(OUTPUT_DIR / "frames").mkdir(exist_ok=True)
-
-# mixed precision for memory efficiency
-if DEVICE == "cuda":
+# Enable optimizations for CUDA
+if device == "cuda":
     torch.backends.cuda.matmul.allow_tf32 = True
     torch.backends.cudnn.allow_tf32 = True
-    torch.backends.cuda.enable_flash_sdp(True)
 
-def extract_frames(video_path, output_dir, max_frames=None, stride=1):
-    """Extract frames from video"""
-    cap = cv2.VideoCapture(video_path)
-    frames = []
-    frame_count = 0
-    extracted_count = 0
-    
-    print(f"Extracting frames from {video_path}...")
-    
-    while True:
-        ret, frame = cap.read()
-        if not ret:
-            break
-            
-        if frame_count % stride == 0:
-            frame_path = output_dir / "frames" / f"frame_{extracted_count:06d}.jpg"
-            cv2.imwrite(str(frame_path), frame)
-            frames.append(str(frame_path))
-            extracted_count += 1
-            
-            if max_frames and extracted_count >= max_frames:
-                break
-                
-        frame_count += 1
-    
-    cap.release()
-    print(f"Extracted {len(frames)} frames")
-    return frames
+# Initialize SAM2 models using the new API
 
-def single_mask_to_rle(mask):
-    rle = mask_util.encode(np.array(mask[:, :, None], order="F", dtype="uint8"))[0]
-    rle["counts"] = rle["counts"].decode("utf-8")
-    return rle
+print(f"Loading SAM2 predictor: {SAM2_MODEL}")
+image_predictor = SAM2ImagePredictor.from_pretrained(SAM2_MODEL)
+video_predictor = SAM2VideoPredictor.from_pretrained(SAM2_MODEL)
 
-# Extract frames from video
-frame_paths = extract_frames(VIDEO_PATH, OUTPUT_DIR, MAX_FRAMES, FRAME_STRIDE)
-
-if not frame_paths:
-    print("No frames extracted from video")
-    exit(1)
-
-# SAM2 video model
-print(f"Loading SAM2 video model: {SAM2_MODEL}")
-sam2_predictor = SAM2VideoPredictor.from_pretrained(SAM2_MODEL, device=DEVICE)
-
-# Grounding DINO tiny w memory optimization
-print(f"Loading Grounding DINO model: {GROUNDING_MODEL}")
-grounding_processor = AutoProcessor.from_pretrained(GROUNDING_MODEL)
-grounding_model = AutoModelForZeroShotObjectDetection.from_pretrained(
-    GROUNDING_MODEL,
-    torch_dtype=torch.float16,
-    low_cpu_mem_usage=True,
-).to(DEVICE)
-
-# Use first frame to get initial detections with Grounding DINO
-first_frame_path = frame_paths[0]
-first_frame = Image.open(first_frame_path)
-
-print("Running Grounding DINO inference on first frame...")
-grounding_inputs = grounding_processor(images=first_frame, text=TEXT_PROMPT, return_tensors="pt").to(DEVICE)
-
-with torch.no_grad(), torch.autocast(device_type=DEVICE, dtype=torch.float16):
-    grounding_outputs = grounding_model(**grounding_inputs)
-
-# Post-process Grounding DINO results
-grounding_results = grounding_processor.post_process_grounded_object_detection(
-    grounding_outputs,
-    grounding_inputs.input_ids,
-    box_threshold=0.4,
-    text_threshold=0.3,
-    target_sizes=[first_frame.size[::-1]],
+# build grounding dino from huggingface
+model_id = MODEL_ID
+processor = AutoProcessor.from_pretrained(model_id)
+grounding_model = AutoModelForZeroShotObjectDetection.from_pretrained(model_id).to(
+    device
 )
 
-del grounding_inputs, grounding_outputs
-torch.cuda.empty_cache() if DEVICE == "cuda" else None
 
-# Get detection results
-input_boxes = grounding_results[0]["boxes"].cpu().numpy()
-confidences = grounding_results[0]["scores"].cpu().numpy().tolist()
-class_names = grounding_results[0]["text_labels"]
+"""
+Custom video input directly using video files
+"""
+video_info = sv.VideoInfo.from_video_path(VIDEO_PATH)  # get video info
+print(video_info)
+frame_generator = sv.get_video_frames_generator(VIDEO_PATH, stride=1, start=0, end=None)
 
-print(f"Found {len(class_names)} objects in first frame: {class_names}")
+# saving video to frames
+source_frames = Path(SOURCE_VIDEO_FRAME_DIR)
+source_frames.mkdir(parents=True, exist_ok=True)
 
-# Initialize SAM2 video predictor
-print("Initializing SAM2 video predictor...")
+with sv.ImageSink(
+    target_dir_path=source_frames, overwrite=True, image_name_pattern="{:05d}.jpg"
+) as sink:
+    for frame in tqdm(frame_generator, desc="Saving Video Frames"):
+        sink.save_image(frame)
+
+# scan all the JPEG frame names in this directory
+frame_names = [
+    p
+    for p in os.listdir(SOURCE_VIDEO_FRAME_DIR)
+    if os.path.splitext(p)[-1] in [".jpg", ".jpeg", ".JPG", ".JPEG"]
+]
+frame_names.sort(key=lambda p: int(os.path.splitext(p)[0]))
+
+# init video predictor state
 with torch.inference_mode(), torch.autocast("cuda", dtype=torch.bfloat16):
-    # Create temporary directory with frames for SAM2
-    temp_frame_dir = OUTPUT_DIR / "temp_frames"
-    temp_frame_dir.mkdir(exist_ok=True)
-    
-    # Copy frames to temporary directory with sequential naming
-    for i, frame_path in enumerate(frame_paths):
-        temp_frame_path = temp_frame_dir / f"{i:06d}.jpg"
-        import shutil
-        shutil.copy2(frame_path, temp_frame_path)
-    
-    # Initialize video state
-    inference_state = sam2_predictor.init_state(video_path=str(temp_frame_dir))
-    
-    # Add prompts on first frame (frame 0)
-    frame_idx = 0
-    
-    # Convert boxes to points (center of each box) and add each object separately
-    all_object_ids = []
-    
-    for i, box in enumerate(input_boxes):
-        # Use center of bounding box as positive point
-        center_x = (box[0] + box[2]) / 2
-        center_y = (box[1] + box[3]) / 2
-        points = np.array([[center_x, center_y]])
-        point_labels = np.array([1])  # positive point
-        
-        # Add prompts to first frame for each object
-        _, out_obj_ids, out_mask_logits = sam2_predictor.add_new_points(
-            inference_state=inference_state,
-            frame_idx=frame_idx,
-            obj_id=i,
-            points=points,
-            labels=point_labels,
+    inference_state = video_predictor.init_state(video_path=SOURCE_VIDEO_FRAME_DIR)
+
+    ann_frame_idx = 0  # the frame index we interact with
+    """
+    Step 2: Prompt Grounding DINO for box coordinates
+    """
+
+    # prompt grounding dino to get the box coordinates on specific frame
+    img_path = os.path.join(SOURCE_VIDEO_FRAME_DIR, frame_names[ann_frame_idx])
+    image = Image.open(img_path)
+    inputs = processor(images=image, text=TEXT_PROMPT, return_tensors="pt").to(device)
+    with torch.no_grad():
+        outputs = grounding_model(**inputs)
+
+    results = processor.post_process_grounded_object_detection(
+        outputs,
+        inputs.input_ids,
+        box_threshold=0.4,
+        text_threshold=0.3,
+        target_sizes=[image.size[::-1]],
+    )
+
+    input_boxes = results[0]["boxes"].cpu().numpy()
+    confidences = results[0]["scores"].cpu().numpy().tolist()
+    class_names = results[0]["text_labels"]
+
+    print(input_boxes)
+
+    # prompt SAM image predictor to get the mask for the object
+    image_predictor.set_image(np.array(image.convert("RGB")))
+
+    # process the detection results
+    OBJECTS = class_names
+
+    print(OBJECTS)
+
+    # prompt SAM 2 image predictor to get the mask for the object
+    masks, scores, logits = image_predictor.predict(
+        point_coords=None,
+        point_labels=None,
+        box=input_boxes,
+        multimask_output=False,
+    )
+    # convert the mask shape to (n, H, W)
+    if masks.ndim == 4:
+        masks = masks.squeeze(1)
+
+    """
+    Step 3: Register each object's positive points to video predictor with seperate add_new_points call
+    """
+
+    assert PROMPT_TYPE_FOR_VIDEO in ["point", "box", "mask"], (
+        "SAM 2 video predictor only support point/box/mask prompt"
+    )
+
+    # If you are using point prompts, we uniformly sample positive points based on the mask
+    if PROMPT_TYPE_FOR_VIDEO == "point":
+        # sample the positive points from mask for each objects
+        all_sample_points = sample_points_from_masks(masks=masks, num_points=10)
+
+        for object_id, (label, points) in enumerate(
+            zip(OBJECTS, all_sample_points), start=1
+        ):
+            labels = np.ones((points.shape[0]), dtype=np.int32)
+            frame_idx, out_obj_ids, out_mask_logits = video_predictor.add_new_points(
+                inference_state,
+                frame_idx=ann_frame_idx,
+                obj_id=object_id,
+                points=points,
+                labels=labels,
+            )
+    # Using box prompt
+    elif PROMPT_TYPE_FOR_VIDEO == "box":
+        for object_id, (label, box) in enumerate(zip(OBJECTS, input_boxes), start=1):
+            frame_idx, out_obj_ids, out_mask_logits = video_predictor.add_new_points(
+                inference_state,
+                frame_idx=ann_frame_idx,
+                obj_id=object_id,
+                box=box,
+            )
+    # Using mask prompt is a more straightforward way
+    elif PROMPT_TYPE_FOR_VIDEO == "mask":
+        for object_id, (label, mask) in enumerate(zip(OBJECTS, masks), start=1):
+            frame_idx, out_obj_ids, out_mask_logits = video_predictor.add_new_mask(
+                inference_state, frame_idx=ann_frame_idx, obj_id=object_id, mask=mask
+            )
+    else:
+        raise NotImplementedError(
+            "SAM 2 video predictor only support point/box/mask prompts"
         )
-        all_object_ids.extend(out_obj_ids)
-    
-    print("Propagating masks across video frames...")
-    
-    # Store all results
-    all_results = []
-    
-    # Propagate masks through video
-    for frame_idx, object_ids, masks in sam2_predictor.propagate_in_video(inference_state):
-        print(f"Processing frame {frame_idx + 1}/{len(frame_paths)}")
-        
-        # Load current frame
-        current_frame_path = frame_paths[frame_idx]
-        current_frame = cv2.imread(current_frame_path)
-        
-        if masks is not None and len(masks) > 0:
-            # Convert masks to numpy array and fix shape
-            masks_np = masks.cpu().numpy()
-            
-            # Remove extra dimension if present (squeeze dimension 1)
-            if masks_np.ndim == 4:
-                masks_np = masks_np.squeeze(1)
-            
-            # Ensure we have the right number of bounding boxes for the masks
-            num_masks = len(masks_np)
-            current_boxes = input_boxes[:num_masks] if num_masks <= len(input_boxes) else input_boxes
-            current_class_names = class_names[:num_masks] if num_masks <= len(class_names) else class_names
-            current_confidences = confidences[:num_masks] if num_masks <= len(confidences) else confidences
-            
-            # Create supervision detections
-            detections = sv.Detections(
-                xyxy=current_boxes,
-                mask=masks_np.astype(bool),
-                class_id=np.array(object_ids)
-            )
-            
-            # Create labels based on actual object IDs
-            labels = []
-            for obj_id in object_ids:
-                if obj_id < len(current_class_names):
-                    class_name = current_class_names[obj_id]
-                    confidence = current_confidences[obj_id]
-                    labels.append(f"{class_name} {confidence:.2f}")
-                else:
-                    labels.append(f"object_{obj_id}")
-            
-            # Annotate frame
-            annotated_frame = current_frame.copy()
-            
-            # Add bounding boxes
-            box_annotator = sv.BoxAnnotator(color=ColorPalette.from_hex(CUSTOM_COLOR_MAP))
-            annotated_frame = box_annotator.annotate(scene=annotated_frame, detections=detections)
-            
-            # Add labels
-            label_annotator = sv.LabelAnnotator(color=ColorPalette.from_hex(CUSTOM_COLOR_MAP))
-            annotated_frame = label_annotator.annotate(
-                scene=annotated_frame, detections=detections, labels=labels
-            )
-            
-            # Add masks
-            mask_annotator = sv.MaskAnnotator(color=ColorPalette.from_hex(CUSTOM_COLOR_MAP))
-            annotated_frame = mask_annotator.annotate(scene=annotated_frame, detections=detections)
-            
-            # Save annotated frame
-            output_frame_path = OUTPUT_DIR / f"annotated_frame_{frame_idx:06d}.jpg"
-            cv2.imwrite(str(output_frame_path), annotated_frame)
-            
-            # Store results for JSON
-            if DUMP_JSON_RESULTS:
-                frame_results = {
-                    "frame_idx": frame_idx,
-                    "frame_path": current_frame_path,
-                    "annotations": []
-                }
-                
-                for i, (obj_id, mask) in enumerate(zip(object_ids, masks_np)):
-                    mask_rle = single_mask_to_rle(mask)
-                    
-                    # Use correct class name and bbox for this object
-                    class_name = current_class_names[min(obj_id, len(current_class_names)-1)]
-                    bbox = current_boxes[min(i, len(current_boxes)-1)].tolist()
-                    score = current_confidences[min(obj_id, len(current_confidences)-1)]
-                    
-                    frame_results["annotations"].append({
-                        "object_id": int(obj_id),
-                        "class_name": class_name,
-                        "bbox": bbox,
-                        "segmentation": mask_rle,
-                        "score": score,
-                    })
-                
-                all_results.append(frame_results)
 
-    # Clean up temporary directory
-    import shutil
-    shutil.rmtree(temp_frame_dir)
+    """
+    Step 4: Propagate the video predictor to get the segmentation results for each frame
+    """
+    video_segments = {}  # video_segments contains the per-frame segmentation results
+    for (
+        out_frame_idx,
+        out_obj_ids,
+        out_mask_logits,
+    ) in video_predictor.propagate_in_video(inference_state):
+        video_segments[out_frame_idx] = {
+            out_obj_id: (out_mask_logits[i] > 0.0).cpu().numpy()
+            for i, out_obj_id in enumerate(out_obj_ids)
+        }
 
-# Clear memory
-torch.cuda.empty_cache() if DEVICE == "cuda" else None
+"""
+Step 5: Visualize the segment results across the video and save them
+"""
 
-# Save JSON results
-if DUMP_JSON_RESULTS and all_results:
-    print("Saving results to JSON...")
-    
-    # Get video info
-    cap = cv2.VideoCapture(VIDEO_PATH)
-    video_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    video_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    fps = cap.get(cv2.CAP_PROP_FPS)
-    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    cap.release()
-    
-    results = {
-        "video_path": VIDEO_PATH,
-        "video_info": {
-            "width": video_width,
-            "height": video_height,
-            "fps": fps,
-            "total_frames": total_frames,
-            "processed_frames": len(all_results)
-        },
-        "grounding_prompt": TEXT_PROMPT,
-        "detected_classes": class_names,
-        "box_format": "xyxy",
-        "frames": all_results
-    }
-    
-    with open(OUTPUT_DIR / "grounded_sam2_video_results.json", "w") as f:
-        json.dump(results, f, indent=2)
+if not os.path.exists(SAVE_TRACKING_RESULTS_DIR):
+    os.makedirs(SAVE_TRACKING_RESULTS_DIR)
 
-print(f"Results saved to {OUTPUT_DIR}")
-print(f"Processed {len(frame_paths)} frames")
-print(f"Found {len(class_names)} object classes: {class_names}")
+ID_TO_OBJECTS = {i: obj for i, obj in enumerate(OBJECTS, start=1)}
+
+for frame_idx, segments in video_segments.items():
+    img = cv2.imread(os.path.join(SOURCE_VIDEO_FRAME_DIR, frame_names[frame_idx]))
+
+    object_ids = list(segments.keys())
+    masks = list(segments.values())
+    masks = np.concatenate(masks, axis=0)
+
+    detections = sv.Detections(
+        xyxy=sv.mask_to_xyxy(masks),  # (n, 4)
+        mask=masks,  # (n, h, w)
+        class_id=np.array(object_ids, dtype=np.int32),
+    )
+    box_annotator = sv.BoxAnnotator()
+    annotated_frame = box_annotator.annotate(scene=img.copy(), detections=detections)
+    label_annotator = sv.LabelAnnotator()
+    annotated_frame = label_annotator.annotate(
+        annotated_frame,
+        detections=detections,
+        labels=[ID_TO_OBJECTS[i] for i in object_ids],
+    )
+    mask_annotator = sv.MaskAnnotator()
+    annotated_frame = mask_annotator.annotate(
+        scene=annotated_frame, detections=detections
+    )
+    cv2.imwrite(
+        os.path.join(SAVE_TRACKING_RESULTS_DIR, f"annotated_frame_{frame_idx:05d}.jpg"),
+        annotated_frame,
+    )
+
+
+"""
+Step 6: Convert the annotated frames to video
+"""
+
+create_video_from_images(SAVE_TRACKING_RESULTS_DIR, OUTPUT_VIDEO_PATH)
