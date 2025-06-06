@@ -74,7 +74,11 @@ class Sam2GroundingDinoService:
         return Image.fromarray(img_array)
 
     def process_keyframe(
-        self, keyframe_path: Path, output_dir: Path, masked_output_dir: Path, text_prompt: str = None
+        self,
+        keyframe_path: Path,
+        output_dir: Path,
+        masked_output_dir: Path,
+        text_prompt: str = None,
     ) -> Dict[str, List[Dict[str, Any]]]:
         """Process a keyframe with Grounding DINO and SAM2 to generate both regular and masked crops"""
         processor, model, sam2_predictor = self._load_models()

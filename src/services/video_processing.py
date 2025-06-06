@@ -6,11 +6,13 @@ from PIL import Image
 
 from ..config import KEYFRAMES_DIR, CROPPED_KEYFRAMES_DIR, MASKED_KEYFRAMES_DIR, ENABLE_MASKING
 from .sam2_gdino import Sam2GroundingDinoService
+from .deduplication import FaissDeduplicationService
 
 
 class VideoProcessingService:
     def __init__(self):
         self.grounding_service = Sam2GroundingDinoService()
+        self.deduplication_service = FaissDeduplicationService()
         self._video_counter = 0
 
     def get_next_video_id(self) -> str:
@@ -74,6 +76,14 @@ class VideoProcessingService:
 
         cap.release()
 
+        # Deduplicate cropped images using FAISS
+        if all_cropped_files:
+            print("Starting deduplication of cropped images...")
+            unique_cropped_files, removed_duplicates = self.deduplication_service.deduplicate_crops(
+                cropped_keyframes_path, all_cropped_files
+            )
+            all_cropped_files = unique_cropped_files
+
         return {
             "scenes_detected": len(scene_list),
             "keyframe_files": keyframe_files,
@@ -132,6 +142,14 @@ class VideoProcessingService:
             all_masked_files.extend(result["masked_files"])
         except Exception as e:
             print(f"Failed to process image with Grounding DINO: {e}")
+
+        # Deduplicate cropped images using FAISS
+        if all_cropped_files:
+            print("Starting deduplication of cropped images...")
+            unique_cropped_files, removed_duplicates = self.deduplication_service.deduplicate_crops(
+                cropped_keyframes_path, all_cropped_files
+            )
+            all_cropped_files = unique_cropped_files
 
         return {
             "scenes_detected": 1,  # Single image = 1 "scene"
