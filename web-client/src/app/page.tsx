@@ -251,7 +251,6 @@ export default function MediaPreview() {
       // Store the full video analysis
       setVideoAnalysis(result)
 
-      alert("File uploaded successfully!")
     } catch (error) {
       console.error("Upload error:", error)
       setUploadError(error instanceof Error ? error.message : "Upload failed")
@@ -301,6 +300,23 @@ export default function MediaPreview() {
     [processFile],
   )
 
+  const handlePaste = useCallback(
+    async (e: React.ClipboardEvent) => {
+      e.preventDefault()
+      
+      const items = Array.from(e.clipboardData.items)
+      const imageItem = items.find(item => item.type.startsWith('image/'))
+      
+      if (imageItem) {
+        const file = imageItem.getAsFile()
+        if (file) {
+          await processFile(file)
+        }
+      }
+    },
+    [processFile],
+  )
+
   const clearFile = useCallback(() => {
     if (mediaFile) {
       URL.revokeObjectURL(mediaFile.url)
@@ -335,7 +351,7 @@ export default function MediaPreview() {
       <div className="mx-auto max-w-7xl space-y-6">
         <div className="text-center space-y-2">
           <h1 className="text-3xl font-bold text-foreground">Fashion Tagging Engine</h1>
-          <p className="text-muted-foreground">Upload or drop an image (PNG, JPEG) or video (MP4) to preview</p>
+          <p className="text-muted-foreground">Upload, drop, or paste an image (PNG, JPEG) or video (MP4) to preview</p>
         </div>
 
         {/* Preview and Analysis Panes */}
@@ -660,6 +676,7 @@ export default function MediaPreview() {
                 onDrop={handleDrop}
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}
+                onPaste={handlePaste}
                 className={cn(
                   "relative border-2 border-dashed rounded-lg p-8 text-center transition-colors cursor-pointer",
                   isDragOver
@@ -667,6 +684,7 @@ export default function MediaPreview() {
                     : "border-border hover:border-muted-foreground hover:bg-accent/50",
                 )}
                 onClick={() => fileInputRef.current?.click()}
+                tabIndex={0}
               >
                 <input
                   ref={fileInputRef}
@@ -681,7 +699,7 @@ export default function MediaPreview() {
                     <Upload className="w-6 h-6 text-muted-foreground" />
                   </div>
                   <div className="space-y-2">
-                    <p className="text-lg font-medium text-foreground">Drop file here or click to upload</p>
+                    <p className="text-lg font-medium text-foreground">Drop file here, paste image, or click to upload</p>
                     <p className="text-sm text-muted-foreground">Supports PNG, JPEG, JPG, and MP4 files</p>
                   </div>
                 </div>
