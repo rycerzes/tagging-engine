@@ -65,6 +65,7 @@ class CroppedKeyframeListResponse(BaseModel):
     video_id: str
     cropped_keyframes: List[Dict[str, Any]]
 
+
 class FashionMatch(BaseModel):
     product_id: str
     score: float
@@ -84,3 +85,38 @@ class VideoQueryResponse(BaseModel):
     video_id: str
     total_crops: int
     crop_matches: List[CropMatch]
+
+
+class SimpleFashionMatch(BaseModel):
+    product_id: str
+    score: float
+    product_name: str
+    title: str
+    description: str
+    product_type: str
+    price: str
+    tags: str
+    collections: str
+
+
+class SimpleCropMatch(BaseModel):
+    crop_id: str
+    filename: str
+    class_name: str
+    original_class_name: str
+    fashion_matches: List[SimpleFashionMatch]
+
+
+class CombinedVideoResponse(BaseModel):
+    video_id: str
+    original_filename: str
+    file_hash: str
+    cached: bool = False
+    cached_from_video_id: Optional[str] = None
+    scenes_detected: int
+    keyframes_generated: int
+    cropped_keyframes_generated: int
+    masked_keyframes_generated: int
+    content_analysis: Optional[ContentAnalysis] = None
+    total_crops_with_matches: int
+    crop_matches: List[SimpleCropMatch]

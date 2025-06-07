@@ -28,7 +28,7 @@ class QueryService:
         self.client = QdrantClient(host=qdrant_host, port=qdrant_port)
 
     def _query_fashion_products(
-        self, embedding: np.ndarray, limit: int = 2
+        self, embedding: np.ndarray, limit: int = 1
     ) -> List[Dict[str, Any]]:
         """Query similar products from fashion_products collection"""
         try:

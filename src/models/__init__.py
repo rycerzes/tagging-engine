@@ -8,7 +8,10 @@ from .responses import (
     VibeAnalysis,
     FashionMatch,
     CropMatch,
-    VideoQueryResponse
+    VideoQueryResponse,
+    SimpleFashionMatch,
+    SimpleCropMatch,
+    CombinedVideoResponse
 )
 
 __all__ = [
@@ -21,5 +24,8 @@ __all__ = [
     "VibeAnalysis",
     "FashionMatch",
     "CropMatch",
-    "VideoQueryResponse"
+    "VideoQueryResponse",
+    "SimpleFashionMatch",
+    "SimpleCropMatch",
+    "CombinedVideoResponse"
 ]

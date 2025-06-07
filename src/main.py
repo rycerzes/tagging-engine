@@ -1,7 +1,7 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from src.routes import health, upload, query
+from src.routes import health, upload, query, simplified_query
 from src.config import KEYFRAMES_DIR, CROPPED_KEYFRAMES_DIR, MASKED_KEYFRAMES_DIR
 import shutil
 
@@ -38,6 +38,7 @@ app.add_middleware(
 app.include_router(health.router)
 app.include_router(upload.router)
 app.include_router(query.router)
+app.include_router(simplified_query.router)
 
 
 # Health check endpoint
