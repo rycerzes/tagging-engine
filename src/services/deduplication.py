@@ -41,21 +41,25 @@ class FaissDeduplicationService:
         self.client = QdrantClient(host=qdrant_host, port=qdrant_port)
 
     def _setup_collection(self, collection_name: str):
-        """Initialize Qdrant collection if it doesn't exist"""
+        """Initialize Qdrant collection - delete and recreate if it exists"""
         try:
             collections = self.client.get_collections().collections
             collection_exists = any(c.name == collection_name for c in collections)
 
-            if not collection_exists:
-                self.client.create_collection(
-                    collection_name=collection_name,
-                    vectors_config=VectorParams(size=512, distance=Distance.COSINE),
-                )
-                print(f"Created Qdrant collection: {collection_name}")
-            else:
-                print(f"Using existing Qdrant collection: {collection_name}")
+            if collection_exists:
+                print(f"Collection {collection_name} exists, deleting...")
+                self.client.delete_collection(collection_name=collection_name)
+                print(f"Deleted collection: {collection_name}")
+
+            # Create new collection
+            self.client.create_collection(
+                collection_name=collection_name,
+                vectors_config=VectorParams(size=512, distance=Distance.COSINE),
+            )
+            print(f"Created new Qdrant collection: {collection_name}")
         except Exception as e:
-            print(f"Warning: Could not setup Qdrant collection: {e}")
+            print(f"Error setting up Qdrant collection: {e}")
+            raise
 
     def _generate_crop_id(self, filename: str, video_id: str) -> str:
         """Generate unique ID for crop"""
@@ -118,7 +122,7 @@ class FaissDeduplicationService:
         cropped_dir: Path,
         cropped_files: List[Dict[str, Any]],
         video_id: str = None,
-    ) -> Tuple[List[Dict[str, Any]], List[str]]:
+    ) -> Tuple[List[Dict[str, Any]], List[str], List[PointStruct]]:
         """
         Deduplicate cropped images using FAISS similarity search
 
@@ -166,7 +170,7 @@ class FaissDeduplicationService:
                     continue
 
         if len(embeddings) == 0:
-            return [], []
+            return [], [], []
 
         # Convert to numpy array and normalize
         embeddings = np.array(embeddings).astype(np.float32)
@@ -263,6 +267,17 @@ class FaissDeduplicationService:
         print(
             f"Deduplication complete: {len(unique_files)} unique images, {len(removed_files)} duplicates removed"
         )
+
+        # Store embeddings in Qdrant after deduplication
+        try:
+            self.client.upsert(
+                collection_name=collection_name, points=points_to_store
+            )
+            print(
+                f"Stored {len(points_to_store)} embeddings in Qdrant collection: {collection_name}"
+            )
+        except Exception as e:
+            print(f"Error storing embeddings in Qdrant: {e}")
 
         # Cleanup
         if DEVICE == "cuda":

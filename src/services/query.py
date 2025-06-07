@@ -5,6 +5,7 @@ from qdrant_client import QdrantClient
 from urllib.parse import urlparse
 from dotenv import load_dotenv
 import os
+from qdrant_client.models import Distance, VectorParams, PointStruct
 
 # Load environment variables
 load_dotenv()
@@ -90,3 +91,49 @@ class QueryService:
         except Exception as e:
             print(f"Error querying video crops: {e}")
             return []
+
+    def _collection_exists(self, collection_name: str) -> bool:
+        """Check if a collection exists"""
+        try:
+            collections = self.client.get_collections()
+            return any(col.name == collection_name for col in collections.collections)
+        except Exception as e:
+            print(f"Error checking if collection exists: {e}")
+            return False
+
+    def _delete_collection(self, collection_name: str) -> bool:
+        """Delete an entire collection"""
+        try:
+            self.client.delete_collection(collection_name=collection_name)
+            print(f"Deleted collection: {collection_name}")
+            return True
+        except Exception as e:
+            print(f"Error deleting collection: {e}")
+            return False
+
+    def _create_collection(self, collection_name: str, vector_size: int = 512) -> bool:
+        """Create a new collection"""
+        try:
+            self.client.create_collection(
+                collection_name=collection_name,
+                vectors_config=VectorParams(size=vector_size, distance=Distance.COSINE)
+            )
+            print(f"Created collection: {collection_name}")
+            return True
+        except Exception as e:
+            print(f"Error creating collection: {e}")
+            return False
+
+    def recreate_collection(self, video_id: str, vector_size: int = 512) -> bool:
+        """Recreate a collection by deleting and creating it"""
+        try:
+            # Check if collection exists and delete it
+            if self._collection_exists(video_id):
+                print(f"Collection {video_id} exists, deleting...")
+                self._delete_collection(video_id)
+
+            # Create new collection
+            return self._create_collection(video_id, vector_size)
+        except Exception as e:
+            print(f"Error recreating collection: {e}")
+            return False

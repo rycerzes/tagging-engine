@@ -1,4 +1,6 @@
 from fastapi import APIRouter, HTTPException, Depends
+from pydantic import BaseModel
+import asyncio
 
 from ..services.query import QueryService
 from ..models import (
@@ -55,4 +57,41 @@ async def query_video_crops(
         raise HTTPException(
             status_code=500, 
             detail=f"Failed to query video crops: {str(e)}"
+        )
+
+
+class VideoRecreateRequest(BaseModel):
+    video_id: str
+    vector_size: int = 512
+
+
+@router.post("/recreate")
+async def recreate_collection(
+    request: VideoRecreateRequest,
+    query_service: QueryService = Depends(get_query_service),
+):
+    """Recreate a video collection."""
+    try:
+        success = await asyncio.get_event_loop().run_in_executor(
+            None, lambda: query_service.recreate_collection(
+                video_id=request.video_id,
+                vector_size=request.vector_size
+            )
+        )
+        
+        if success:
+            return {
+                "message": f"Successfully recreated collection {request.video_id}",
+                "video_id": request.video_id
+            }
+        else:
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to recreate collection"
+            )
+    
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to recreate collection: {str(e)}"
         )
