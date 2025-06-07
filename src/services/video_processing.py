@@ -7,18 +7,51 @@ from PIL import Image
 from ..config import KEYFRAMES_DIR, CROPPED_KEYFRAMES_DIR, MASKED_KEYFRAMES_DIR, ENABLE_MASKING
 from .sam2_gdino import Sam2GroundingDinoService
 from .deduplication import FaissDeduplicationService
+from .cache import FileProcessingCache
 
 
 class VideoProcessingService:
     def __init__(self):
         self.grounding_service = Sam2GroundingDinoService()
         self.deduplication_service = FaissDeduplicationService()
+        self.cache_service = FileProcessingCache()
         self._video_counter = 0
 
     def get_next_video_id(self) -> str:
         """Generate next video ID"""
         self._video_counter += 1
         return f"video_{self._video_counter:04d}"
+
+    def get_cached_result(self, file_hash: str) -> Dict[str, Any]:
+        """Get cached processing result and adapt it for new video_id"""
+        cached_data = self.cache_service.get_cached_result(file_hash)
+        if not cached_data:
+            return None
+            
+        # Generate new video_id for this request
+        new_video_id = self.get_next_video_id()
+        
+        # Copy cached result structure with new video_id
+        result = cached_data["result"].copy()
+        
+        # Update video_id references in the result
+        if "video_id" in result:
+            result["video_id"] = new_video_id
+            
+        # The keyframes and crops will be served from the original cached location
+        # but we'll update the URLs to use the new video_id
+        result["cache_info"] = {
+            "cached": True,
+            "original_video_id": cached_data["result"].get("video_id"),
+            "cached_at": cached_data["cached_at"],
+            "file_hash": file_hash
+        }
+        
+        return result
+
+    def store_processing_result(self, file_hash: str, result: Dict[str, Any], original_filename: str) -> None:
+        """Store processing result in cache"""
+        self.cache_service.store_result(file_hash, result, original_filename)
 
     def process_video(
         self, video_path: Path, video_id: str, text_prompt: str = None
@@ -86,6 +119,7 @@ class VideoProcessingService:
             all_cropped_files = unique_cropped_files
 
         return {
+            "video_id": video_id,
             "scenes_detected": len(scene_list),
             "keyframe_files": keyframe_files,
             "cropped_files": all_cropped_files,
@@ -155,6 +189,7 @@ class VideoProcessingService:
             all_cropped_files = unique_cropped_files
 
         return {
+            "video_id": video_id,
             "scenes_detected": 1,  # Single image = 1 "scene"
             "keyframe_files": keyframe_files,
             "cropped_files": all_cropped_files,

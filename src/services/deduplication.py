@@ -270,9 +270,7 @@ class FaissDeduplicationService:
 
         # Store embeddings in Qdrant after deduplication
         try:
-            self.client.upsert(
-                collection_name=collection_name, points=points_to_store
-            )
+            self.client.upsert(collection_name=collection_name, points=points_to_store)
             print(
                 f"Stored {len(points_to_store)} embeddings in Qdrant collection: {collection_name}"
             )

@@ -29,9 +29,12 @@ class ContentAnalysis(BaseModel):
 class UploadVideoResponse(BaseModel):
     video_id: str
     original_filename: str
+    file_hash: str
+    cached: bool = False
+    cached_from_video_id: Optional[str] = None
     scenes_detected: int
     keyframes_generated: int
-    keyframes: List[Dict[str, Any]]
+    keyframes: List[Dict[str, str]]
     keyframes_url: str
     cropped_keyframes_generated: int
     cropped_keyframes: List[Dict[str, Any]]
@@ -50,7 +53,7 @@ class KeyframeListItem(BaseModel):
 
 class KeyframeListResponse(BaseModel):
     video_id: str
-    keyframes: List[KeyframeListItem]
+    keyframes: List[Dict[str, str]]
 
 
 class CroppedKeyframeListItem(BaseModel):
@@ -60,7 +63,7 @@ class CroppedKeyframeListItem(BaseModel):
 
 class CroppedKeyframeListResponse(BaseModel):
     video_id: str
-    cropped_keyframes: List[CroppedKeyframeListItem]
+    cropped_keyframes: List[Dict[str, Any]]
 
 class FashionMatch(BaseModel):
     product_id: str

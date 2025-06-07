@@ -14,6 +14,7 @@ from ..config import (
     TEXT_PROMPT,
 )
 from ..services import VideoProcessingService, GeminiService
+from ..utils import compute_content_hash
 from ..models import (
     UploadVideoResponse,
     KeyframeListResponse,
@@ -53,16 +54,52 @@ async def upload_video(
             detail="Only MP4 videos and JPG/JPEG/PNG images are supported"
         )
 
-    video_id = video_service.get_next_video_id()
-    file_name = f"{video_id}_{file.filename}"
-    file_path = UPLOAD_DIR / file_name
-
     try:
+        # Read file content and compute hash
         content = await file.read()
+        file_hash = compute_content_hash(content)
+        logger.info(f"File hash: {file_hash}")
+        
+        # Check for cached result
+        cached_result = video_service.get_cached_result(file_hash)
+        if cached_result:
+            logger.info(f"Using cached result for file hash: {file_hash}")
+            
+            # Convert cached result to response format
+            cache_info = cached_result.get("cache_info", {})
+            original_video_id = cache_info.get("original_video_id")
+            new_video_id = cached_result["video_id"]
+            
+            return UploadVideoResponse(
+                video_id=new_video_id,
+                original_filename=file.filename,
+                file_hash=file_hash,
+                cached=True,
+                cached_from_video_id=original_video_id,
+                scenes_detected=cached_result["scenes_detected"],
+                keyframes_generated=len(cached_result["keyframe_files"]),
+                keyframes=cached_result["keyframe_files"],
+                keyframes_url=f"/upload/{original_video_id}/keyframes",  # Use original video_id for URLs
+                cropped_keyframes_generated=len(cached_result["cropped_files"]),
+                cropped_keyframes=cached_result["cropped_files"],
+                cropped_keyframes_url=f"/upload/{original_video_id}/keyframes-cropped",
+                masked_keyframes_generated=len(cached_result["masked_files"]),
+                masked_keyframes=cached_result["masked_files"],
+                masked_keyframes_url=f"/upload/{original_video_id}/keyframes-masked",
+                content_analysis=cached_result.get("content_analysis"),
+            )
+
+        # File not cached - proceed with processing
+        video_id = video_service.get_next_video_id()
+        file_name = f"{video_id}_{file.filename}"
+        file_path = UPLOAD_DIR / file_name
+
+        # Save file for processing
         with open(file_path, "wb") as f:
             f.write(content)
+
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to save file: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to process file: {str(e)}")
 
     try:
         content_analysis = None
@@ -118,6 +155,11 @@ async def upload_video(
                 vibes=vibes
             )
 
+        # Store result in cache
+        cache_result = result.copy()
+        cache_result["content_analysis"] = content_analysis.dict() if content_analysis else None
+        video_service.store_processing_result(file_hash, cache_result, file.filename)
+
         # Handle async Qdrant storage after getting results
         points_to_store = result.get("points_to_store", [])
         if points_to_store:
@@ -134,6 +176,8 @@ async def upload_video(
         return UploadVideoResponse(
             video_id=video_id,
             original_filename=file.filename,
+            file_hash=file_hash,
+            cached=False,
             scenes_detected=result["scenes_detected"],
             keyframes_generated=len(result["keyframe_files"]),
             keyframes=result["keyframe_files"],
