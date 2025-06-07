@@ -173,3 +173,5 @@ poetry.toml
 pyrightconfig.json
 
 data/*
+
+!web-client/src/*
