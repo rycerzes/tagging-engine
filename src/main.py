@@ -2,19 +2,25 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from src.routes import health, upload, query, simplified_query
-from src.config import KEYFRAMES_DIR, CROPPED_KEYFRAMES_DIR, MASKED_KEYFRAMES_DIR
+from src.config import KEYFRAMES_DIR, CROPPED_KEYFRAMES_DIR, MASKED_KEYFRAMES_DIR, UPLOAD_DIR
 import shutil
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: Clean temporary keyframe directories
+    # Startup: Clean temporary keyframe directories and cache
     directories_to_clean = [KEYFRAMES_DIR, CROPPED_KEYFRAMES_DIR, MASKED_KEYFRAMES_DIR]
 
     for directory in directories_to_clean:
         if directory.exists():
             shutil.rmtree(directory)
         directory.mkdir(exist_ok=True)
+
+    # Clean cache directory
+    cache_dir = UPLOAD_DIR / "cache"
+    if cache_dir.exists():
+        shutil.rmtree(cache_dir)
+    cache_dir.mkdir(exist_ok=True)
 
     yield
 

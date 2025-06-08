@@ -90,6 +90,7 @@ class VideoQueryResponse(BaseModel):
 class SimpleFashionMatch(BaseModel):
     product_id: str
     score: float
+    match_quality: str
     product_name: str
     title: str
     description: str

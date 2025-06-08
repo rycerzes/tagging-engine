@@ -46,13 +46,13 @@ async def upload_video(
     gemini_service: GeminiService = Depends(get_gemini_service),
 ):
     """Upload an MP4 video or image (JPG/JPEG/PNG) and generate keyframes/crops."""
-    file_extension = file.filename.lower().split('.')[-1]
+    file_extension = file.filename.lower().split(".")[-1]
     supported_extensions = ["mp4", "jpg", "jpeg", "png"]
-    
+
     if file_extension not in supported_extensions:
         raise HTTPException(
-            status_code=400, 
-            detail="Only MP4 videos and JPG/JPEG/PNG images are supported"
+            status_code=400,
+            detail="Only MP4 videos and JPG/JPEG/PNG images are supported",
         )
 
     try:
@@ -60,19 +60,21 @@ async def upload_video(
         content = await file.read()
         file_hash = compute_content_hash(content)
         logger.info(f"File hash: {file_hash}")
-        
+
         # Check for cached result
         cached_result = video_service.get_cached_result(file_hash)
         if cached_result:
             logger.info(f"Using cached result for file hash: {file_hash}")
+
+            # Generate a response video_id WITHOUT incrementing the persistent counter
+            response_video_id = video_service.get_response_video_id_for_cached_result(cached_result)
             
-            # Convert cached result to response format
+            # Extract cache info
             cache_info = cached_result.get("cache_info", {})
             original_video_id = cache_info.get("original_video_id")
-            new_video_id = cached_result["video_id"]
-            
+
             return UploadVideoResponse(
-                video_id=new_video_id,
+                video_id=response_video_id,
                 original_filename=file.filename,
                 file_hash=file_hash,
                 cached=True,
@@ -80,7 +82,7 @@ async def upload_video(
                 scenes_detected=cached_result["scenes_detected"],
                 keyframes_generated=len(cached_result["keyframe_files"]),
                 keyframes=cached_result["keyframe_files"],
-                keyframes_url=f"/upload/{original_video_id}/keyframes",  # Use original video_id for URLs
+                keyframes_url=f"/upload/{original_video_id}/keyframes",  # Use original for file access
                 cropped_keyframes_generated=len(cached_result["cropped_files"]),
                 cropped_keyframes=cached_result["cropped_files"],
                 cropped_keyframes_url=f"/upload/{original_video_id}/keyframes-cropped",
@@ -91,6 +93,7 @@ async def upload_video(
             )
 
         # File not cached - proceed with processing
+        # Only increment counter when actually processing a new file
         video_id = video_service.get_next_video_id()
         file_name = f"{video_id}_{file.filename}"
         file_path = UPLOAD_DIR / file_name
@@ -104,7 +107,7 @@ async def upload_video(
 
     try:
         content_analysis = None
-        
+
         # Generate dynamic text prompt using Gemini if enabled
         if USE_GEMINI_FOR_TEXT_PROMPT:
             logger.info("Using Gemini for text prompt generation")
@@ -115,17 +118,19 @@ async def upload_video(
                 text_prompt = gemini_service.generate_text_prompt_from_image(file_path)
                 result = video_service.process_image(file_path, video_id, text_prompt)
         else:
-            logger.info("Using default text prompt and performing concurrent content analysis")
+            logger.info(
+                "Using default text prompt and performing concurrent content analysis"
+            )
             text_prompt = TEXT_PROMPT
-            
+
             # Run both processes concurrently
             is_video = file_extension == "mp4"
-            
+
             # Create tasks for concurrent execution
             analysis_task = asyncio.create_task(
                 gemini_service.analyze_content_async(file_path, is_video)
             )
-            
+
             # Run video/image processing in thread pool to avoid blocking
             loop = asyncio.get_event_loop()
             if is_video:
@@ -136,29 +141,31 @@ async def upload_video(
                 processing_task = loop.run_in_executor(
                     None, video_service.process_image, file_path, video_id, text_prompt
                 )
-            
+
             # Wait for both tasks to complete
-            analysis_result, result = await asyncio.gather(analysis_task, processing_task)
-            
+            analysis_result, result = await asyncio.gather(
+                analysis_task, processing_task
+            )
+
             # Convert to ContentAnalysis model
             vibes = [
                 VibeAnalysis(
-                    id=vibe["id"],
-                    name=vibe["name"],
-                    confidence=vibe["confidence"]
+                    id=vibe["id"], name=vibe["name"], confidence=vibe["confidence"]
                 )
                 for vibe in analysis_result.get("vibes", [])
             ]
-            
+
             content_analysis = ContentAnalysis(
                 audio_transcription=analysis_result.get("audio_transcription"),
                 clothing_description=analysis_result.get("clothing_description", ""),
-                vibes=vibes
+                vibes=vibes,
             )
 
         # Store result in cache
         cache_result = result.copy()
-        cache_result["content_analysis"] = content_analysis.dict() if content_analysis else None
+        cache_result["content_analysis"] = (
+            content_analysis.dict() if content_analysis else None
+        )
         video_service.store_processing_result(file_hash, cache_result, file.filename)
 
         # Handle async Qdrant storage after getting results
@@ -171,7 +178,7 @@ async def upload_video(
                     points_to_store, collection_name
                 )
             )
-        
+
         os.remove(file_path)
 
         return UploadVideoResponse(
@@ -195,9 +202,7 @@ async def upload_video(
     except Exception as e:
         if file_path.exists():
             os.remove(file_path)
-        raise HTTPException(
-            status_code=500, detail=f"Failed to process file: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to process file: {str(e)}")
 
 
 @router.get("/upload/{video_id}/keyframes", response_model=KeyframeListResponse)

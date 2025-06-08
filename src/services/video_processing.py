@@ -4,7 +4,13 @@ from pathlib import Path
 from scenedetect import detect, ContentDetector
 from PIL import Image
 
-from ..config import KEYFRAMES_DIR, CROPPED_KEYFRAMES_DIR, MASKED_KEYFRAMES_DIR, ENABLE_MASKING
+from ..config import (
+    KEYFRAMES_DIR,
+    CROPPED_KEYFRAMES_DIR,
+    MASKED_KEYFRAMES_DIR,
+    ENABLE_MASKING,
+    UPLOAD_DIR,
+)
 from .sam2_gdino import Sam2GroundingDinoService
 from .deduplication import FaissDeduplicationService
 from .cache import FileProcessingCache
@@ -15,41 +21,65 @@ class VideoProcessingService:
         self.grounding_service = Sam2GroundingDinoService()
         self.deduplication_service = FaissDeduplicationService()
         self.cache_service = FileProcessingCache()
-        self._video_counter = 0
+        self._counter_file = UPLOAD_DIR / "video_counter.txt"
+        self._video_counter = self._load_counter()
+
+    def _load_counter(self) -> int:
+        """Load the persistent video counter from file"""
+        try:
+            if self._counter_file.exists():
+                with open(self._counter_file, "r") as f:
+                    return int(f.read().strip())
+        except Exception:
+            pass
+        return 0
+
+    def _save_counter(self) -> None:
+        """Save the current counter to file"""
+        try:
+            with open(self._counter_file, "w") as f:
+                f.write(str(self._video_counter))
+        except Exception:
+            pass
 
     def get_next_video_id(self) -> str:
-        """Generate next video ID"""
+        """Generate next video ID with persistent counter"""
         self._video_counter += 1
+        self._save_counter()
         return f"video_{self._video_counter:04d}"
 
     def get_cached_result(self, file_hash: str) -> Dict[str, Any]:
-        """Get cached processing result and adapt it for new video_id"""
+        """Get cached processing result without incrementing counter"""
         cached_data = self.cache_service.get_cached_result(file_hash)
         if not cached_data:
             return None
-            
-        # Generate new video_id for this request
-        new_video_id = self.get_next_video_id()
-        
-        # Copy cached result structure with new video_id
+
+        # Return cached data as-is without any modifications
         result = cached_data["result"].copy()
-        
-        # Update video_id references in the result
-        if "video_id" in result:
-            result["video_id"] = new_video_id
-            
-        # The keyframes and crops will be served from the original cached location
-        # but we'll update the URLs to use the new video_id
+
+        # Mark as cached but keep original video_id
         result["cache_info"] = {
             "cached": True,
-            "original_video_id": cached_data["result"].get("video_id"),
+            "original_video_id": result.get("video_id"),
             "cached_at": cached_data["cached_at"],
-            "file_hash": file_hash
+            "file_hash": file_hash,
         }
-        
+
         return result
 
-    def store_processing_result(self, file_hash: str, result: Dict[str, Any], original_filename: str) -> None:
+    def get_response_video_id_for_cached_result(
+        self, cached_result: Dict[str, Any]
+    ) -> str:
+        """Generate a response video ID for cached result WITHOUT incrementing the persistent counter"""
+        # Use a temporary counter for response IDs that doesn't affect the persistent counter
+        import time
+
+        timestamp = int(time.time() * 1000) % 100000  # Use timestamp for uniqueness
+        return f"cached_{timestamp:05d}"
+
+    def store_processing_result(
+        self, file_hash: str, result: Dict[str, Any], original_filename: str
+    ) -> None:
         """Store processing result in cache"""
         self.cache_service.store_result(file_hash, result, original_filename)
 
@@ -98,7 +128,10 @@ class VideoProcessingService:
                 # Process keyframe with Grounding DINO and SAM2
                 try:
                     result = self.grounding_service.process_keyframe(
-                        keyframe_path, cropped_keyframes_path, masked_keyframes_path, text_prompt
+                        keyframe_path,
+                        cropped_keyframes_path,
+                        masked_keyframes_path,
+                        text_prompt,
                     )
                     all_cropped_files.extend(result["cropped_files"])
                     all_masked_files.extend(result["masked_files"])
@@ -113,8 +146,10 @@ class VideoProcessingService:
         points_to_store = []
         if all_cropped_files:
             print("Starting deduplication of cropped images...")
-            unique_cropped_files, removed_duplicates, points_to_store = self.deduplication_service.deduplicate_crops(
-                cropped_keyframes_path, all_cropped_files, video_id
+            unique_cropped_files, removed_duplicates, points_to_store = (
+                self.deduplication_service.deduplicate_crops(
+                    cropped_keyframes_path, all_cropped_files, video_id
+                )
             )
             all_cropped_files = unique_cropped_files
 
@@ -172,7 +207,10 @@ class VideoProcessingService:
         # Process keyframe with Grounding DINO and SAM2
         try:
             result = self.grounding_service.process_keyframe(
-                keyframe_path, cropped_keyframes_path, masked_keyframes_path, text_prompt
+                keyframe_path,
+                cropped_keyframes_path,
+                masked_keyframes_path,
+                text_prompt,
             )
             all_cropped_files.extend(result["cropped_files"])
             all_masked_files.extend(result["masked_files"])
@@ -183,8 +221,10 @@ class VideoProcessingService:
         points_to_store = []
         if all_cropped_files:
             print("Starting deduplication of cropped images...")
-            unique_cropped_files, removed_duplicates, points_to_store = self.deduplication_service.deduplicate_crops(
-                cropped_keyframes_path, all_cropped_files, video_id
+            unique_cropped_files, removed_duplicates, points_to_store = (
+                self.deduplication_service.deduplicate_crops(
+                    cropped_keyframes_path, all_cropped_files, video_id
+                )
             )
             all_cropped_files = unique_cropped_files
 
