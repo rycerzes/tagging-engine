@@ -45,6 +45,7 @@ interface FashionMatch {
   price: string
   tags: string
   collections: string
+  match_quality?: string
 }
 
 interface CroppedKeyframe {
@@ -84,6 +85,8 @@ export default function MediaPreview() {
   const [isLoadingKeyframes, setIsLoadingKeyframes] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [keyframesLoaded, setKeyframesLoaded] = useState(false)
+  const [uploadStartTime, setUploadStartTime] = useState<number | null>(null)
+  const [elapsedTime, setElapsedTime] = useState(0)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const acceptedTypes = ["image/png", "image/jpeg", "image/jpg", "video/mp4"]
@@ -225,12 +228,33 @@ export default function MediaPreview() {
     })
   }
 
+  // Timer effect for upload elapsed time
+  useEffect(() => {
+    let interval: NodeJS.Timeout | null = null
+
+    if (isUploading && uploadStartTime) {
+      interval = setInterval(() => {
+        setElapsedTime(Math.floor((Date.now() - uploadStartTime) / 1000))
+      }, 1000)
+    } else {
+      setElapsedTime(0)
+    }
+
+    return () => {
+      if (interval) {
+        clearInterval(interval)
+      }
+    }
+  }, [isUploading, uploadStartTime])
+
   const uploadFile = async () => {
     if (!mediaFile) return
 
     setIsUploading(true)
     setUploadError(null)
     setKeyframesLoaded(false)
+    setUploadStartTime(Date.now())
+    setElapsedTime(0)
 
     try {
       const formData = new FormData()
@@ -256,6 +280,8 @@ export default function MediaPreview() {
       setUploadError(error instanceof Error ? error.message : "Upload failed")
     } finally {
       setIsUploading(false)
+      setUploadStartTime(null)
+      setElapsedTime(0)
     }
   }
 
@@ -267,6 +293,12 @@ export default function MediaPreview() {
 
   const formatConfidence = (confidence: number): string => {
     return `${Math.round(confidence * 100)}%`
+  }
+
+  const formatElapsedTime = (seconds: number): string => {
+    const mins = Math.floor(seconds / 60)
+    const secs = seconds % 60
+    return mins > 0 ? `${mins}:${secs.toString().padStart(2, "0")}` : `${secs}s`
   }
 
   const handleDrop = useCallback(
@@ -303,10 +335,10 @@ export default function MediaPreview() {
   const handlePaste = useCallback(
     async (e: React.ClipboardEvent) => {
       e.preventDefault()
-      
+
       const items = Array.from(e.clipboardData.items)
       const imageItem = items.find(item => item.type.startsWith('image/'))
-      
+
       if (imageItem) {
         const file = imageItem.getAsFile()
         if (file) {
@@ -384,7 +416,7 @@ export default function MediaPreview() {
                         {isUploading ? (
                           <>
                             <div className="w-4 h-4 mr-1 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                            Uploading...
+                            Uploading... {formatElapsedTime(elapsedTime)}
                           </>
                         ) : (
                           <>
@@ -563,11 +595,12 @@ export default function MediaPreview() {
                           <div key={index} className="space-y-2">
                             <HoverCard>
                               <HoverCardTrigger asChild>
-                                <div className="relative aspect-square bg-muted rounded-lg overflow-hidden cursor-pointer hover:ring-2 hover:ring-primary/50 transition-all">
+                                <div className="relative bg-muted rounded-lg overflow-hidden cursor-pointer hover:ring-2 hover:ring-primary/50 transition-all min-h-[120px] flex items-center justify-center">
                                   <img
                                     src={keyframe.imageUrl || "/placeholder.svg?height=200&width=200"}
                                     alt={keyframe.class_name}
-                                    className="w-full h-full object-cover"
+                                    className="max-w-full max-h-full object-contain"
+                                    style={{ imageRendering: 'crisp-edges' }}
                                     onError={(e) => {
                                       console.error('Failed to load image:', keyframe.imageUrl)
                                       console.error('Image error event:', e)
@@ -594,7 +627,8 @@ export default function MediaPreview() {
                                     <img
                                       src={keyframe.imageUrl || "/placeholder.svg?height=40&width=40"}
                                       alt={keyframe.class_name}
-                                      className="w-10 h-10 rounded object-cover"
+                                      className="w-10 h-10 rounded object-contain bg-muted"
+                                      style={{ imageRendering: 'crisp-edges' }}
                                     />
                                     <div>
                                       <p className="font-semibold text-sm capitalize">{keyframe.class_name}</p>
@@ -615,6 +649,9 @@ export default function MediaPreview() {
                                               <div className="flex-1">
                                                 <p className="font-medium text-sm line-clamp-1">{match.title}</p>
                                                 <p className="text-xs text-muted-foreground">{match.product_type}</p>
+                                                {match.match_quality && (
+                                                  <p className="text-xs text-primary font-medium">Quality: {match.match_quality}</p>
+                                                )}
                                               </div>
                                               <div className="text-right">
                                                 <p className="font-semibold text-sm">₹{match.price}</p>
