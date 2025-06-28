@@ -5,6 +5,7 @@ on:
     branches: [ keploy ]
   pull_request:
     branches: [ keploy ]
+  workflow_dispatch:
 
 jobs:
   keploy-tests:
