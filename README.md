@@ -443,3 +443,6 @@ QDRANT_COLLECTION_NAME="fashion_products"
    ```
     * Access: [http://localhost:3000](http://localhost:3000)
 ---
+
+    
+add dockerfile and docker-compose.yml

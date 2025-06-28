@@ -1,0 +1,24 @@
+name: Keploy CI
+
+on:
+  push:
+    branches: [ keploy ]
+  pull_request:
+    branches: [ keploy ]
+
+jobs:
+  keploy-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Keploy CLI
+        run: |
+          curl --silent -L https://keploy.io/ent/install.sh | bash
+
+      - name: Run Keploy Test Suite
+        env:
+          KEPLOY_API_KEY: ${{ secrets.KEPLOY_API_KEY }}
+        run: |
+          keploy test-suite --app=820c68c7-1fb9-43e6-89fa-638480d95182 --base-path https://glados.zeedonk-ratio.ts.net --cloud

@@ -1,0 +1,1061 @@
+{
+    "openapi": "3.1.0",
+    "info": {
+        "title": "Tagging Engine API",
+        "description": "API for the tagging engine application",
+        "version": "0.1.0"
+    },
+    "paths": {
+        "/health/": {
+            "get": {
+                "tags": [
+                    "health"
+                ],
+                "summary": "Health Check",
+                "description": "Comprehensive health check endpoint that returns the status of all services.",
+                "operationId": "health_check_health__get",
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {}
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/upload": {
+            "post": {
+                "tags": [
+                    "upload"
+                ],
+                "summary": "Upload Video",
+                "description": "Upload an MP4 video or image (JPG/JPEG/PNG) and generate keyframes/crops.",
+                "operationId": "upload_video_upload_post",
+                "requestBody": {
+                    "content": {
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/Body_upload_video_upload_post"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/UploadVideoResponse"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HTTPValidationError"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/upload/{video_id}/keyframes": {
+            "get": {
+                "tags": [
+                    "upload"
+                ],
+                "summary": "List Keyframes",
+                "description": "List all keyframes for a given video.",
+                "operationId": "list_keyframes_upload__video_id__keyframes_get",
+                "parameters": [
+                    {
+                        "name": "video_id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "title": "Video Id"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/KeyframeListResponse"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HTTPValidationError"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/upload/{video_id}/keyframes/{keyframe_name}": {
+            "get": {
+                "tags": [
+                    "upload"
+                ],
+                "summary": "Get Keyframe",
+                "description": "Serve a specific keyframe image.",
+                "operationId": "get_keyframe_upload__video_id__keyframes__keyframe_name__get",
+                "parameters": [
+                    {
+                        "name": "video_id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "title": "Video Id"
+                        }
+                    },
+                    {
+                        "name": "keyframe_name",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "title": "Keyframe Name"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {}
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HTTPValidationError"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/upload/{video_id}/keyframes-cropped": {
+            "get": {
+                "tags": [
+                    "upload"
+                ],
+                "summary": "List Cropped Keyframes",
+                "description": "List all cropped keyframes for a given video.",
+                "operationId": "list_cropped_keyframes_upload__video_id__keyframes_cropped_get",
+                "parameters": [
+                    {
+                        "name": "video_id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "title": "Video Id"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CroppedKeyframeListResponse"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HTTPValidationError"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/upload/{video_id}/keyframes-cropped/{cropped_keyframe_name}": {
+            "get": {
+                "tags": [
+                    "upload"
+                ],
+                "summary": "Get Cropped Keyframe",
+                "description": "Serve a specific cropped keyframe image.",
+                "operationId": "get_cropped_keyframe_upload__video_id__keyframes_cropped__cropped_keyframe_name__get",
+                "parameters": [
+                    {
+                        "name": "video_id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "title": "Video Id"
+                        }
+                    },
+                    {
+                        "name": "cropped_keyframe_name",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "title": "Cropped Keyframe Name"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {}
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HTTPValidationError"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/upload/{video_id}/keyframes-masked": {
+            "get": {
+                "tags": [
+                    "upload"
+                ],
+                "summary": "List Masked Keyframes",
+                "description": "List all masked keyframes for a given video.",
+                "operationId": "list_masked_keyframes_upload__video_id__keyframes_masked_get",
+                "parameters": [
+                    {
+                        "name": "video_id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "title": "Video Id"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CroppedKeyframeListResponse"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HTTPValidationError"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/upload/{video_id}/keyframes-masked/{masked_keyframe_name}": {
+            "get": {
+                "tags": [
+                    "upload"
+                ],
+                "summary": "Get Masked Keyframe",
+                "description": "Serve a specific masked keyframe image.",
+                "operationId": "get_masked_keyframe_upload__video_id__keyframes_masked__masked_keyframe_name__get",
+                "parameters": [
+                    {
+                        "name": "video_id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "title": "Video Id"
+                        }
+                    },
+                    {
+                        "name": "masked_keyframe_name",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "title": "Masked Keyframe Name"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {}
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HTTPValidationError"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/query": {
+            "get": {
+                "tags": [
+                    "query"
+                ],
+                "summary": "Query Video Crops",
+                "description": "Query all crops for a video and their fashion product matches.",
+                "operationId": "query_video_crops_query_get",
+                "parameters": [
+                    {
+                        "name": "video_id",
+                        "in": "query",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "title": "Video Id"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/VideoQueryResponse"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HTTPValidationError"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/recreate": {
+            "post": {
+                "tags": [
+                    "query"
+                ],
+                "summary": "Recreate Collection",
+                "description": "Recreate a video collection.",
+                "operationId": "recreate_collection_recreate_post",
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/VideoRecreateRequest"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {}
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HTTPValidationError"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/simplified_query": {
+            "get": {
+                "tags": [
+                    "simplified_query"
+                ],
+                "summary": "Get Simplified Query Data",
+                "description": "Get simplified video data combining content analysis and fashion matches.",
+                "operationId": "get_simplified_query_data_simplified_query_get",
+                "parameters": [
+                    {
+                        "name": "video_id",
+                        "in": "query",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "description": "Video ID to query",
+                            "title": "Video Id"
+                        },
+                        "description": "Video ID to query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CombinedVideoResponse"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HTTPValidationError"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/": {
+            "get": {
+                "summary": "Root",
+                "operationId": "root__get",
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {}
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "components": {
+        "schemas": {
+            "Body_upload_video_upload_post": {
+                "properties": {
+                    "file": {
+                        "type": "string",
+                        "format": "binary",
+                        "title": "File"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "file"
+                ],
+                "title": "Body_upload_video_upload_post"
+            },
+            "CombinedVideoResponse": {
+                "properties": {
+                    "video_id": {
+                        "type": "string",
+                        "title": "Video Id"
+                    },
+                    "original_filename": {
+                        "type": "string",
+                        "title": "Original Filename"
+                    },
+                    "file_hash": {
+                        "type": "string",
+                        "title": "File Hash"
+                    },
+                    "cached": {
+                        "type": "boolean",
+                        "title": "Cached",
+                        "default": false
+                    },
+                    "cached_from_video_id": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Cached From Video Id"
+                    },
+                    "scenes_detected": {
+                        "type": "integer",
+                        "title": "Scenes Detected"
+                    },
+                    "keyframes_generated": {
+                        "type": "integer",
+                        "title": "Keyframes Generated"
+                    },
+                    "cropped_keyframes_generated": {
+                        "type": "integer",
+                        "title": "Cropped Keyframes Generated"
+                    },
+                    "masked_keyframes_generated": {
+                        "type": "integer",
+                        "title": "Masked Keyframes Generated"
+                    },
+                    "content_analysis": {
+                        "anyOf": [
+                            {
+                                "$ref": "#/components/schemas/ContentAnalysis"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    },
+                    "total_crops_with_matches": {
+                        "type": "integer",
+                        "title": "Total Crops With Matches"
+                    },
+                    "crop_matches": {
+                        "items": {
+                            "$ref": "#/components/schemas/SimpleCropMatch"
+                        },
+                        "type": "array",
+                        "title": "Crop Matches"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "video_id",
+                    "original_filename",
+                    "file_hash",
+                    "scenes_detected",
+                    "keyframes_generated",
+                    "cropped_keyframes_generated",
+                    "masked_keyframes_generated",
+                    "total_crops_with_matches",
+                    "crop_matches"
+                ],
+                "title": "CombinedVideoResponse"
+            },
+            "ContentAnalysis": {
+                "properties": {
+                    "audio_transcription": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Audio Transcription"
+                    },
+                    "clothing_description": {
+                        "type": "string",
+                        "title": "Clothing Description"
+                    },
+                    "vibes": {
+                        "items": {
+                            "$ref": "#/components/schemas/VibeAnalysis"
+                        },
+                        "type": "array",
+                        "title": "Vibes"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "clothing_description",
+                    "vibes"
+                ],
+                "title": "ContentAnalysis"
+            },
+            "CropMatch": {
+                "properties": {
+                    "crop_id": {
+                        "type": "string",
+                        "title": "Crop Id"
+                    },
+                    "filename": {
+                        "type": "string",
+                        "title": "Filename"
+                    },
+                    "class_name": {
+                        "type": "string",
+                        "title": "Class Name"
+                    },
+                    "original_class_name": {
+                        "type": "string",
+                        "title": "Original Class Name"
+                    },
+                    "bbox": {
+                        "items": {
+                            "type": "number"
+                        },
+                        "type": "array",
+                        "title": "Bbox"
+                    },
+                    "fashion_matches": {
+                        "items": {
+                            "$ref": "#/components/schemas/FashionMatch"
+                        },
+                        "type": "array",
+                        "title": "Fashion Matches"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "crop_id",
+                    "filename",
+                    "class_name",
+                    "original_class_name",
+                    "bbox",
+                    "fashion_matches"
+                ],
+                "title": "CropMatch"
+            },
+            "CroppedKeyframeListResponse": {
+                "properties": {
+                    "video_id": {
+                        "type": "string",
+                        "title": "Video Id"
+                    },
+                    "cropped_keyframes": {
+                        "items": {
+                            "additionalProperties": true,
+                            "type": "object"
+                        },
+                        "type": "array",
+                        "title": "Cropped Keyframes"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "video_id",
+                    "cropped_keyframes"
+                ],
+                "title": "CroppedKeyframeListResponse"
+            },
+            "FashionMatch": {
+                "properties": {
+                    "product_id": {
+                        "type": "string",
+                        "title": "Product Id"
+                    },
+                    "score": {
+                        "type": "number",
+                        "title": "Score"
+                    },
+                    "payload": {
+                        "additionalProperties": true,
+                        "type": "object",
+                        "title": "Payload"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "product_id",
+                    "score",
+                    "payload"
+                ],
+                "title": "FashionMatch"
+            },
+            "HTTPValidationError": {
+                "properties": {
+                    "detail": {
+                        "items": {
+                            "$ref": "#/components/schemas/ValidationError"
+                        },
+                        "type": "array",
+                        "title": "Detail"
+                    }
+                },
+                "type": "object",
+                "title": "HTTPValidationError"
+            },
+            "KeyframeListResponse": {
+                "properties": {
+                    "video_id": {
+                        "type": "string",
+                        "title": "Video Id"
+                    },
+                    "keyframes": {
+                        "items": {
+                            "additionalProperties": {
+                                "type": "string"
+                            },
+                            "type": "object"
+                        },
+                        "type": "array",
+                        "title": "Keyframes"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "video_id",
+                    "keyframes"
+                ],
+                "title": "KeyframeListResponse"
+            },
+            "SimpleCropMatch": {
+                "properties": {
+                    "crop_id": {
+                        "type": "string",
+                        "title": "Crop Id"
+                    },
+                    "filename": {
+                        "type": "string",
+                        "title": "Filename"
+                    },
+                    "class_name": {
+                        "type": "string",
+                        "title": "Class Name"
+                    },
+                    "original_class_name": {
+                        "type": "string",
+                        "title": "Original Class Name"
+                    },
+                    "fashion_matches": {
+                        "items": {
+                            "$ref": "#/components/schemas/SimpleFashionMatch"
+                        },
+                        "type": "array",
+                        "title": "Fashion Matches"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "crop_id",
+                    "filename",
+                    "class_name",
+                    "original_class_name",
+                    "fashion_matches"
+                ],
+                "title": "SimpleCropMatch"
+            },
+            "SimpleFashionMatch": {
+                "properties": {
+                    "product_id": {
+                        "type": "string",
+                        "title": "Product Id"
+                    },
+                    "score": {
+                        "type": "number",
+                        "title": "Score"
+                    },
+                    "match_quality": {
+                        "type": "string",
+                        "title": "Match Quality"
+                    },
+                    "product_name": {
+                        "type": "string",
+                        "title": "Product Name"
+                    },
+                    "title": {
+                        "type": "string",
+                        "title": "Title"
+                    },
+                    "description": {
+                        "type": "string",
+                        "title": "Description"
+                    },
+                    "product_type": {
+                        "type": "string",
+                        "title": "Product Type"
+                    },
+                    "price": {
+                        "type": "string",
+                        "title": "Price"
+                    },
+                    "tags": {
+                        "type": "string",
+                        "title": "Tags"
+                    },
+                    "collections": {
+                        "type": "string",
+                        "title": "Collections"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "product_id",
+                    "score",
+                    "match_quality",
+                    "product_name",
+                    "title",
+                    "description",
+                    "product_type",
+                    "price",
+                    "tags",
+                    "collections"
+                ],
+                "title": "SimpleFashionMatch"
+            },
+            "UploadVideoResponse": {
+                "properties": {
+                    "video_id": {
+                        "type": "string",
+                        "title": "Video Id"
+                    },
+                    "original_filename": {
+                        "type": "string",
+                        "title": "Original Filename"
+                    },
+                    "file_hash": {
+                        "type": "string",
+                        "title": "File Hash"
+                    },
+                    "cached": {
+                        "type": "boolean",
+                        "title": "Cached",
+                        "default": false
+                    },
+                    "cached_from_video_id": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Cached From Video Id"
+                    },
+                    "scenes_detected": {
+                        "type": "integer",
+                        "title": "Scenes Detected"
+                    },
+                    "keyframes_generated": {
+                        "type": "integer",
+                        "title": "Keyframes Generated"
+                    },
+                    "keyframes": {
+                        "items": {
+                            "additionalProperties": {
+                                "type": "string"
+                            },
+                            "type": "object"
+                        },
+                        "type": "array",
+                        "title": "Keyframes"
+                    },
+                    "keyframes_url": {
+                        "type": "string",
+                        "title": "Keyframes Url"
+                    },
+                    "cropped_keyframes_generated": {
+                        "type": "integer",
+                        "title": "Cropped Keyframes Generated"
+                    },
+                    "cropped_keyframes": {
+                        "items": {
+                            "additionalProperties": true,
+                            "type": "object"
+                        },
+                        "type": "array",
+                        "title": "Cropped Keyframes"
+                    },
+                    "cropped_keyframes_url": {
+                        "type": "string",
+                        "title": "Cropped Keyframes Url"
+                    },
+                    "masked_keyframes_generated": {
+                        "type": "integer",
+                        "title": "Masked Keyframes Generated"
+                    },
+                    "masked_keyframes": {
+                        "items": {
+                            "additionalProperties": true,
+                            "type": "object"
+                        },
+                        "type": "array",
+                        "title": "Masked Keyframes"
+                    },
+                    "masked_keyframes_url": {
+                        "type": "string",
+                        "title": "Masked Keyframes Url"
+                    },
+                    "content_analysis": {
+                        "anyOf": [
+                            {
+                                "$ref": "#/components/schemas/ContentAnalysis"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "video_id",
+                    "original_filename",
+                    "file_hash",
+                    "scenes_detected",
+                    "keyframes_generated",
+                    "keyframes",
+                    "keyframes_url",
+                    "cropped_keyframes_generated",
+                    "cropped_keyframes",
+                    "cropped_keyframes_url",
+                    "masked_keyframes_generated",
+                    "masked_keyframes",
+                    "masked_keyframes_url"
+                ],
+                "title": "UploadVideoResponse"
+            },
+            "ValidationError": {
+                "properties": {
+                    "loc": {
+                        "items": {
+                            "anyOf": [
+                                {
+                                    "type": "string"
+                                },
+                                {
+                                    "type": "integer"
+                                }
+                            ]
+                        },
+                        "type": "array",
+                        "title": "Location"
+                    },
+                    "msg": {
+                        "type": "string",
+                        "title": "Message"
+                    },
+                    "type": {
+                        "type": "string",
+                        "title": "Error Type"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "loc",
+                    "msg",
+                    "type"
+                ],
+                "title": "ValidationError"
+            },
+            "VibeAnalysis": {
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "title": "Id"
+                    },
+                    "name": {
+                        "type": "string",
+                        "title": "Name"
+                    },
+                    "confidence": {
+                        "type": "number",
+                        "title": "Confidence"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "id",
+                    "name",
+                    "confidence"
+                ],
+                "title": "VibeAnalysis"
+            },
+            "VideoQueryResponse": {
+                "properties": {
+                    "video_id": {
+                        "type": "string",
+                        "title": "Video Id"
+                    },
+                    "total_crops": {
+                        "type": "integer",
+                        "title": "Total Crops"
+                    },
+                    "crop_matches": {
+                        "items": {
+                            "$ref": "#/components/schemas/CropMatch"
+                        },
+                        "type": "array",
+                        "title": "Crop Matches"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "video_id",
+                    "total_crops",
+                    "crop_matches"
+                ],
+                "title": "VideoQueryResponse"
+            },
+            "VideoRecreateRequest": {
+                "properties": {
+                    "video_id": {
+                        "type": "string",
+                        "title": "Video Id"
+                    },
+                    "vector_size": {
+                        "type": "integer",
+                        "title": "Vector Size",
+                        "default": 512
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "video_id"
+                ],
+                "title": "VideoRecreateRequest"
+            }
+        }
+    }
+}
