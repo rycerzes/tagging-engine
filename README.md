@@ -446,3 +446,54 @@ QDRANT_COLLECTION_NAME="fashion_products"
 
     
 add dockerfile and docker-compose.yml
+
+<!-- keploy -->
+```md
++-------------------------------------------------+--------+-------+
+|                      SUITE                      | STATUS | TESTS |
++-------------------------------------------------+--------+-------+
+| Get_Cropped_Keyframe_Method_Not_Allowed_POST    | PASSED |     1 |
++-------------------------------------------------+--------+-------+
+| Get_Keyframe_Method_Not_Allowed_DELETE          | PASSED |     1 |
++-------------------------------------------------+--------+-------+
+| Get_Masked_Keyframe_Method_Not_Allowed_DELETE   | PASSED |     1 |
++-------------------------------------------------+--------+-------+
+| Health_Check_Method_Not_Allowed_DELETE          | PASSED |     1 |
++-------------------------------------------------+--------+-------+
+| Health_Check_Method_Not_Allowed_POST            | PASSED |     1 |
++-------------------------------------------------+--------+-------+
+| Health_Check_Method_Not_Allowed_PUT             | PASSED |     1 |
++-------------------------------------------------+--------+-------+
+| List_Cropped_Keyframes_Method_Not_Allowed_PATCH | PASSED |     1 |
++-------------------------------------------------+--------+-------+
+| List_Keyframes_Method_Not_Allowed_POST          | PASSED |     1 |
++-------------------------------------------------+--------+-------+
+| List_Keyframes_Method_Not_Allowed_PUT           | PASSED |     1 |
++-------------------------------------------------+--------+-------+
+| List_Masked_Keyframes_Method_Not_Allowed_PUT    | PASSED |     1 |
++-------------------------------------------------+--------+-------+
+| Query_Endpoint_Method_Not_Allowed_POST          | PASSED |     1 |
++-------------------------------------------------+--------+-------+
+| Query_Endpoint_Method_Not_Allowed_PUT           | PASSED |     1 |
++-------------------------------------------------+--------+-------+
+| Query_Missing_Video_Id                          | PASSED |     1 |
++-------------------------------------------------+--------+-------+
+| Recreate_Collection_Empty_Body                  | PASSED |     1 |
++-------------------------------------------------+--------+-------+
+| Recreate_Collection_Float_Vector_Size           | PASSED |     1 |
++-------------------------------------------------+--------+-------+
+| Recreate_Collection_Invalid_Vector_Size_Type    | PASSED |     1 |
++-------------------------------------------------+--------+-------+
+| Recreate_Collection_Missing_Video_Id            | PASSED |     1 |
++-------------------------------------------------+--------+-------+
+| Recreate_Collection_Null_Video_Id               | PASSED |     1 |
++-------------------------------------------------+--------+-------+
+| Root_Endpoint_Method_Not_Allowed_POST           | PASSED |     1 |
++-------------------------------------------------+--------+-------+
+| Simplified_Query_Missing_Video_Id               | PASSED |     1 |
++-------------------------------------------------+--------+-------+
+Test suite execution summary
+Total suites:  20
+Passed suites:  20
+Failed suites:  0
+```
